@@ -10,37 +10,31 @@ import keras
 
 from keras.utils import clear_session
 
-logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 BASE = Path(__file__).resolve().parent
 EPOCHS = 1000
 BATCH_SIZE = 128
 NUM_SAMPLES_INFERENCE = 1000
 MODELS = {
-        "flow_matching": (bf.networks.FlowMatching, {"subnet": "mlp"}),
-        "cot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet": "mlp"}),
-        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE, "subnet": "mlp"}),
-        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"subnet": "mlp"}),
+        "flow_matching": (bf.networks.FlowMatching, {}),
+        "cot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
+        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
+        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
-            "subnet": "mlp",
-            "noise_schedule": "edm", 
+            "noise_schedule": "edm",
             "prediction_type": "F", 
             "schedule_kwargs": {"variance_type": "preserving"}}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
-            "subnet": "mlp",
-            "noise_schedule": "edm", 
+            "noise_schedule": "edm",
             "prediction_type": "F", 
             "schedule_kwargs": {"variance_type": "exploding"}}),
         "diffusion_cosine_F": (bf.networks.DiffusionModel, {
-            "subnet": "mlp",
-            "noise_schedule": "cosine", 
+            "noise_schedule": "cosine",
             "prediction_type": "F", }),
         "diffusion_cosine_v": (bf.networks.DiffusionModel, {
-            "subnet": "mlp",
-            "noise_schedule": "cosine", 
+            "noise_schedule": "cosine",
             "prediction_type": "velocity"}),   
         "diffusion_cosine_noise": (bf.networks.DiffusionModel, {
-            "subnet": "mlp",
-            "noise_schedule": "cosine", 
+            "noise_schedule": "cosine",
             "prediction_type": "noise"}),
     }
 

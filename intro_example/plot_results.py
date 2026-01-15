@@ -55,10 +55,7 @@ models = [m for m in list(titles.keys()) if m != "abc"]
 c2st_results = {k: None for k in models}
 mmd_results = {k: None for k in models}
 for m in models:
-    cross_validation = []
-    for _ in range(5):
-        cross_validation.append(classifier_two_sample_test(kinematics_samples[m], approx_ground_truth))
-    c2st_results[m] = np.mean(cross_validation)
+    c2st_results[m] = classifier_two_sample_test(kinematics_samples[m], approx_ground_truth)
     mmd_results[m] = maximum_mean_discrepancy(kinematics_samples[m], approx_ground_truth)#.detach().cpu().item()
 
 # %%
