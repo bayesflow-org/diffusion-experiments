@@ -42,7 +42,9 @@ def _():
 def _(BASE, pd):
     # Load the dataset
     results = pd.read_csv(BASE / 'plots' / 'c2st_benchmark_results.csv')
-    results.head()
+    results = results[results.subnet == ['mlp', 'time_mlp'][1]]
+    results.reset_index(inplace=True, drop=True)
+    results
     return (results,)
 
 

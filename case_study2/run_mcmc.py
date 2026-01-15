@@ -288,8 +288,7 @@ if __name__ == "__main__":
             'posterior_calibration_error_mad': calibration_error(
                 mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=median_abs_deviation
             )['values'].mean(),
-            'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug, mlp_widths=(128, 128, 128),
-                                               validation_split=0.25)
+            'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug)
         }], index=[0])
         with open(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv', 'wb') as f:
             mcmc_df.to_csv(f)

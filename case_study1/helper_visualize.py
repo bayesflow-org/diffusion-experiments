@@ -9,12 +9,15 @@ import sbibm
 BASE = Path(__file__).resolve().parent
 
 
-def get_lueckmann_results():
+def get_lueckmann_results(algorithm='NPE'):
     results_lueckmann = pd.read_csv(BASE / 'plots' / 'lueckmann_results.csv')
     results_lueckmann = results_lueckmann.loc[results_lueckmann['num_simulations'] == max(results_lueckmann['num_simulations']),
             ['task', 'algorithm', 'C2ST']]
-    results_lueckmann = results_lueckmann[results_lueckmann['algorithm'] == 'NPE']
-    results_lueckmann = results_lueckmann.groupby('task')['C2ST'].mean().reset_index()
+    results_lueckmann = results_lueckmann.groupby(['algorithm', 'task'])['C2ST'].mean().reset_index()
+    if algorithm == 'min':
+        results_lueckmann = results_lueckmann.groupby(['task']).min('C2ST').reset_index()
+    else:
+        results_lueckmann = results_lueckmann[results_lueckmann.algorithm == algorithm].reset_index(drop=True)
     return results_lueckmann
 
 
@@ -79,7 +82,7 @@ def get_sampler_name(k=None):
     names = {
         'ode-euler': 'Euler',
         'ode-euler-mini': r'Euler ($2\%$ steps)',
-        'ode-euler-small': r'Euler ($20\%$ steps)',
+        'ode-euler-small': r'Euler ($10\%$ steps)',
         'ode-euler-scheduled': r'Euler (Scheduled)',
         'ode-rk45': 'RK45',
         'ode-rk45-adaptive': 'RK45-Adaptive',

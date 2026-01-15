@@ -476,6 +476,5 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, petab_pro
         workflow_samples_aug = workflow_samples_aug[~np.isnan(workflow_samples_aug).any(axis=1)]
         test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
         print(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
-        metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug,
-                                                         mlp_widths=(128, 128, 128), validation_split=0.25)
+        metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug)
     return metrics

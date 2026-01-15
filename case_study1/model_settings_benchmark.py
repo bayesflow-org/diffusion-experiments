@@ -92,7 +92,7 @@ SAMPLER_SETTINGS = {
     },
     'ode-euler-small': {
         'method': 'euler',
-        'steps': 100,
+        'steps': 50,
         'min_steps': MIN_STEPS,
         'max_steps': MAX_STEPS
     },
@@ -219,22 +219,8 @@ def is_compatible(_model: str, _sampler: str) -> bool:
     return True
 
 
-ADAPTER_SETTINGS = {
-    'lotka_volterra': 'log',
-    'gaussian_mixture': (-10, 10),
-    'gaussian_linear_uniform': (-1, 1),
-    'two_moons': (-1, 1),
-    'bernoulli_glm': None,
-    'sir': 'log',
-    'gaussian_linear': None,
-    'slcp': (-3, 3),
-    'slcp_distractors': (-3, 3),
-    'bernoulli_glm_raw': None
-}
-
-
-def create_adapter(config):
-    if config is None:
+def create_adapter(task_name):
+    if task_name in ['bernoulli_glm', 'gaussian_linear', 'bernoulli_glm_raw']:
         return (
             bf.adapters.Adapter()
             .to_array()
@@ -242,16 +228,22 @@ def create_adapter(config):
             .rename('parameters', 'inference_variables')
             .rename('observables', 'inference_conditions')
         )
-    elif config == 'log':
+    elif task_name in ['lotka_volterra', 'sir']:
         return (
             bf.adapters.Adapter()
             .to_array()
             .convert_dtype("float64", "float32")
             .log("parameters")
+            .log("observables", p1=True)
             .rename('parameters', 'inference_variables')
             .rename('observables', 'inference_conditions')
         )
-    elif isinstance(config, tuple) and len(config) == 2:
+    elif task_name in ['gaussian_mixture', 'gaussian_linear_uniform', 'two_moons']:
+        config = {  # parameters
+            'gaussian_mixture': (-10, 10),
+            'gaussian_linear_uniform': (-1, 1),
+            'two_moons': (-1, 1),
+        }[task_name]
         return (
             bf.adapters.Adapter()
             .to_array()
@@ -260,8 +252,23 @@ def create_adapter(config):
             .rename('parameters', 'inference_variables')
             .rename('observables', 'inference_conditions')
         )
+    elif task_name in ['slcp', 'slcp_distractors']:
+        config = {  # parameters, observables
+            'slcp': ((-3, 3), (-30, 30)),
+            'slcp_distractors': ((-3, 3), (-3000, 3000)),
+        }[task_name]
+        return (
+            bf.adapters.Adapter()
+            .to_array()
+            .convert_dtype("float64", "float32")
+            .constrain("parameters", lower=config[0][0], upper=config[0][1], epsilon=1e-6, inclusive='both')
+            .constrain("observables", lower=config[1][0], upper=config[1][1], epsilon=1e-6, inclusive='both')
+            .nan_to_num("observables", default_value=-5)  # observables can be nan due to out of bounds
+            .rename('parameters', 'inference_variables')
+            .rename('observables', 'inference_conditions')
+        )
     else:
-        raise ValueError("Unknown adapter configuration")
+        raise ValueError(f"Unknown adapter for {task_name}")
 
 
 def load_model(conf_tuple, simulator, training_data, storage, problem_name, model_name, sum_dim=0, use_ema=True):
@@ -270,7 +277,11 @@ def load_model(conf_tuple, simulator, training_data, storage, problem_name, mode
     else:
         summary_network = None
 
-    adapter = create_adapter(ADAPTER_SETTINGS[problem_name])
+    adapter = create_adapter(problem_name)
+    if 'time_mlp' in model_name:
+        conf_tuple[1]['subnet'] = 'time_mlp'
+    else:
+        conf_tuple[1]['subnet'] = 'mlp'
 
     workflow = bf.BasicWorkflow(
         adapter=adapter,

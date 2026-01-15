@@ -16,30 +16,35 @@ EPOCHS = 1000
 BATCH_SIZE = 128
 NUM_SAMPLES_INFERENCE = 1000
 MODELS = {
-        "flow_matching": (bf.networks.FlowMatching, {}),
-        "cot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
-        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
-        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {}),
+        "flow_matching": (bf.networks.FlowMatching, {"subnet": "mlp"}),
+        "cot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet": "mlp"}),
+        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE, "subnet": "mlp"}),
+        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"subnet": "mlp"}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
+            "subnet": "mlp",
             "noise_schedule": "edm", 
             "prediction_type": "F", 
             "schedule_kwargs": {"variance_type": "preserving"}}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
+            "subnet": "mlp",
             "noise_schedule": "edm", 
             "prediction_type": "F", 
             "schedule_kwargs": {"variance_type": "exploding"}}),
         "diffusion_cosine_F": (bf.networks.DiffusionModel, {
+            "subnet": "mlp",
             "noise_schedule": "cosine", 
             "prediction_type": "F", }),
         "diffusion_cosine_v": (bf.networks.DiffusionModel, {
+            "subnet": "mlp",
             "noise_schedule": "cosine", 
             "prediction_type": "velocity"}),   
         "diffusion_cosine_noise": (bf.networks.DiffusionModel, {
+            "subnet": "mlp",
             "noise_schedule": "cosine", 
             "prediction_type": "noise"}),
     }
 
-DATASETS = ["inverse_kinematics"]  # "two_moons"
+DATASETS = ["inverse_kinematics"]
 
 def train_model(model_name, dataset_name, conf_tuple, data):
 
