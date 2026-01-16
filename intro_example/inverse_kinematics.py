@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import logging
 
 import numpy as np
 import scipy
@@ -17,6 +18,8 @@ latex_fonts = {
     "font.size": 10,
     "legend.fontsize": 10,
 }
+
+logging.getLogger("matplotlib").setLevel(logging.ERROR)
 
 
 class InverseKinematicsModel:

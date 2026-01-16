@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.4"
+__generated_with = "0.19.4"
 app = marimo.App(width="full")
 
 
@@ -42,7 +42,6 @@ def _():
 def _(BASE, pd):
     # Load the dataset
     results = pd.read_csv(BASE / 'plots' / 'c2st_benchmark_results.csv')
-    results = results[results.subnet == ['mlp', 'time_mlp'][1]]
     results.reset_index(inplace=True, drop=True)
     results
     return (results,)
@@ -51,7 +50,7 @@ def _(BASE, pd):
 @app.cell
 def _(SAMPLER_SETTINGS):
     all_samplers= ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[0]
+    SHOW_SAMPLER = all_samplers[1]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 

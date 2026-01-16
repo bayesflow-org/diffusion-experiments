@@ -17,7 +17,7 @@ def model_sampler_key(_model: str, _sampler: str) -> str:
 
 benchmarks = list(
     (m, mlp, t, s) for s, m, mlp, t in itertools.product(
-    SAMPLER_SETTINGS, MODELS.keys(), ['mlp', 'time_mlp'], sbibm.get_available_tasks()
+    SAMPLER_SETTINGS, MODELS.keys(), ['time_mlp'], sbibm.get_available_tasks()
 ) if is_compatible(m, s)
 )
 BASE = Path(__file__).resolve().parent

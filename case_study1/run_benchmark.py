@@ -26,14 +26,16 @@ job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 partition = os.environ.get("SLURM_JOB_PARTITION", "unknown")
 benchmarks = list(
     (m, mlp, t, s) for s, m, mlp, t in itertools.product(
-    ['ode', 'sde', 'langevin'], MODELS.keys(), ['mlp', 'time_mlp'], sbibm.get_available_tasks()
+    ['ode', 'sde', 'langevin'], MODELS.keys(), ['time_mlp'], sbibm.get_available_tasks()
 ) if is_compatible(m, s)
-) # 640 jobs, first 360 are ODE
+) # 320 jobs, first 180 are ODE
 
 model_name, subnet, task_name, sampler_family = benchmarks[job_id]
 BASE = Path(__file__).resolve().parent
 metrics_dir = BASE / 'metrics'
+models_dir = BASE / 'models'
 #metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics')
+#models_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/models')
 
 logging.info(f"Running job {job_id} with model {model_name}, subnet {subnet}, task {task_name}, sampler {sampler_family}.")
 task = sbibm.get_task(task_name)
@@ -83,7 +85,7 @@ else:
 workflow = load_model(conf_tuple=conf_tuple,
                       training_data=training_data,
                       simulator=simulator,
-                      storage=BASE / "models",
+                      storage=models_dir,
                       problem_name=task_name, model_name=model_name)
 
 #%%
