@@ -1,18 +1,12 @@
-#%% md
-# # PEtab benchmark model
-#%%
-# pip install git+https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git@master#subdirectory=src/python
-# pypesto, amici, petab, fides, joblib
-
 import logging
-from copy import deepcopy
 from collections import defaultdict
+from copy import deepcopy
+from functools import partial
 
 import benchmark_models_petab as benchmark_models
 import numpy as np
 import pandas as pd
 import pypesto
-import pypesto.petab
 import pypesto.petab
 from bayesflow.diagnostics.metrics import (root_mean_squared_error,
                                            posterior_contraction,
@@ -21,8 +15,6 @@ from bayesflow.diagnostics.metrics import (root_mean_squared_error,
 from joblib import Parallel, delayed
 from scipy import stats
 from scipy.stats import median_abs_deviation
-from functools import partial
-
 
 mad = partial(median_abs_deviation, nan_policy='omit')
 
@@ -38,9 +30,9 @@ def sample_and_simulate(amici_predictor, factory, petab_problem, pypesto_problem
     return result
 
 
-def simulate_parallel(n_samples, amici_predictor, factory, petab_problem, pypesto_problem, return_df=False, n_cpus=10):
+def simulate_parallel(n_samples, amici_predictor, factory, petab_problem, pypesto_problem, return_df=False, n_cpus=-1):
     """Parallel sampling and simulation"""
-    results = Parallel(n_jobs=n_cpus, verbose=100)(
+    results = Parallel(n_jobs=n_cpus, verbose=1)(
         sample_and_simulate(amici_predictor, factory, petab_problem, pypesto_problem, return_df) for _ in range(n_samples)
     )
     results_dict = defaultdict(list)
@@ -88,7 +80,7 @@ def load_problem(problem_name = "Beer_MolBioSystems2014", create_amici_model=Tru
     for i, row in petab_problem.parameter_df.iterrows():
         if 'objectivePriorType' in row and not pd.isna(row['objectivePriorType']):
             if row['estimate'] == 0:
-                print(f"Parameter {i} has a {row['objectivePriorType']} prior but is not estimated, setting to nan")
+                logging.info(f"Parameter {i} has a {row['objectivePriorType']} prior but is not estimated, setting to nan")
                 petab_problem.parameter_df.loc[i, 'objectivePriorType'] = np.nan
             # validate petab problem, if scale for parameter is defined, prior must be on the same scale
             if row['parameterScale'] != 'lin' and not row['objectivePriorType'].startswith('parameterScale'):
@@ -109,7 +101,7 @@ def load_problem(problem_name = "Beer_MolBioSystems2014", create_amici_model=Tru
             def __init__(self):
                 self.petab_problem = petab_problem
 
-        importer = pypesto.petab.PetabImporter(petab_problem, simulator=DummySimulator())
+        importer = pypesto.petab.PetabImporter(petab_problem, simulator_type='petab', simulator=DummySimulator())
 
     # Creating the pypesto problem from PEtab
     pypesto_problem = importer.create_problem()
@@ -275,7 +267,7 @@ def apply_noise_to_data(sim_df, params, field, pypesto_problem, petab_problem):
             # get noise parameter for this observable
             obs_noise_param = sim_df.loc[obs_cond_index, 'noiseParameters'].unique()
             if len(obs_noise_param) > 1:
-                print(obs_noise_param)
+                logging.info(obs_noise_param)
                 raise ValueError(f"Multiple noise parameters for observable {obs_id}")
 
             # scale simulation according to observable transformation
@@ -347,7 +339,7 @@ def amici_pred_to_df(pred, params, factory, pypesto_problem, petab_problem, fiel
         sim_df = apply_noise_to_data(sim_df, params, field=field,
                                      pypesto_problem=pypesto_problem, petab_problem=petab_problem)
     except ValueError as e:
-        print("Simulation failed:", e)
+        logging.warning("Simulation failed:", e)
         sim_df = petab_problem.measurement_df.copy()
         sim_df[field] = 0  # will be set to nan later
         failed = True
@@ -475,6 +467,6 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, petab_pro
         # compute C2ST
         workflow_samples_aug = workflow_samples_aug[~np.isnan(workflow_samples_aug).any(axis=1)]
         test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
-        print(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
+        logging.info(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
         metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug)
     return metrics

@@ -1,11 +1,5 @@
-#%% md
 # # PEtab benchmark model with BayesFlow
-#%%
-# pip install git+https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git@master#subdirectory=src/python
-# pypesto, amici, petab, fides, joblib
-#%%
 import os
-
 if "KERAS_BACKEND" not in os.environ:
     os.environ["KERAS_BACKEND"] = "tensorflow"
 else:
@@ -42,6 +36,10 @@ BASE = Path(__file__).resolve().parent
 num_training_sets = 512 * 64
 num_validation_sets = 1000
 problem_name = "Beer_MolBioSystems2014"
+models_dir = BASE / "models"
+metrics_dir = BASE / 'metrics'
+#metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/metrics')
+#models_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models')
 mcmc_path = BASE / "models" / f'mcmc_samples_{problem_name}.pkl'
 RUN_TEST = False
 
@@ -135,11 +133,11 @@ if __name__ == "__main__":
     lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
     ubs = np.array([ub for i, ub in enumerate(petab_problem.ub_scaled) if i in pypesto_problem.x_free_indices])
 
-    if os.path.exists(BASE / "models" / f"validation_data_petab_{problem_name}.pkl"):
-        with open(BASE / "models" / f'validation_data_petab_{problem_name}.pkl', 'rb') as f:
+    if os.path.exists(models_dir / f"validation_data_petab_{problem_name}.pkl"):
+        with open(models_dir / f'validation_data_petab_{problem_name}.pkl', 'rb') as f:
             validation_data = pickle.load(f)
         try:
-            with open(BASE / "models" / f'training_data_petab_{problem_name}.pkl', 'rb') as f:
+            with open(models_dir / f'training_data_petab_{problem_name}.pkl', 'rb') as f:
                 training_data = pickle.load(f)
         except FileNotFoundError:
             training_data = None
@@ -150,9 +148,9 @@ if __name__ == "__main__":
         validation_data = simulate_parallel(num_validation_sets, amici_predictor, factory, petab_problem,
                                             pypesto_problem, return_df=True)
 
-        with open(BASE / "models" / f'training_data_petab_{problem_name}.pkl', 'wb') as f:
+        with open(models_dir / f'training_data_petab_{problem_name}.pkl', 'wb') as f:
             pickle.dump(training_data, f)
-        with open(BASE / "models" / f'validation_data_petab_{problem_name}.pkl', 'wb') as f:
+        with open(models_dir / f'validation_data_petab_{problem_name}.pkl', 'wb') as f:
             pickle.dump(validation_data, f)
 
     if RUN_TEST:
@@ -248,8 +246,8 @@ if __name__ == "__main__":
             test_data[key] = values[mcmc_mask]
 
     #%%
-    if os.path.exists(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv'):
-        with open(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv', 'rb') as f:
+    if os.path.exists(metrics_dir / f'{problem_name}_mcmc_metrics.csv'):
+        with open(metrics_dir / f'{problem_name}_mcmc_metrics.csv', 'rb') as f:
             mcmc_df = pd.read_csv(f)
         print("MCMC metrics already computed.")
     else:
@@ -290,5 +288,5 @@ if __name__ == "__main__":
             )['values'].mean(),
             'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug)
         }], index=[0])
-        with open(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv', 'wb') as f:
+        with open(metrics_dir / f'{problem_name}_mcmc_metrics.csv', 'wb') as f:
             mcmc_df.to_csv(f)

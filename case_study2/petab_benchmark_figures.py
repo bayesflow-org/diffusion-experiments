@@ -152,18 +152,18 @@ if __name__ == "__main__":
     design_choice_map = {
         # Flow Matching
         "ot_flow_matching": "OT",
-        "flow_matching": "vanilla",
+        "flow_matching": "Uniform",
         "flow_matching_edm": r"$\rho=-0.6$",
 
         # Diffusion
         "diffusion_cosine_v": r"Cosine, VP, $\v$",
-        "diffusion_cosine_F": r"Cosine, VP, $\boldsymbol{F}$",
-        "diffusion_edm_vp": r"EDM, VP, $\boldsymbol{F}$",
-        "diffusion_edm_ve": r"EDM, VE, $\boldsymbol{F}$",
+        "diffusion_cosine_F": r"Cosine, VP, $\mathbf{F}$",
+        "diffusion_edm_vp": r"EDM, VP, $\mathbf{F}$",
+        "diffusion_edm_ve": r"EDM, VE, $\mathbf{F}$",
         "diffusion_cosine_noise": r"Cosine, VP, $\epsilonb$",
 
         # Diffusion (EMA)
-        "diffusion_edm_vp_ema": r"EDM, VP, $\boldsymbol{F}$",
+        "diffusion_edm_vp_ema": r"EMA, EDM, VP, $\mathbf{F}$",
 
         # Consistency
         "consistency_model": "Discrete",
