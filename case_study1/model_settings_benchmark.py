@@ -278,10 +278,6 @@ def load_model(conf_tuple, simulator, training_data, storage, problem_name, mode
         summary_network = None
 
     adapter = create_adapter(problem_name)
-    if 'time_mlp' in model_name:
-        conf_tuple[1]['subnet'] = 'time_mlp'
-    else:
-        conf_tuple[1]['subnet'] = 'mlp'
 
     workflow = bf.BasicWorkflow(
         adapter=adapter,

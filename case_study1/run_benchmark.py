@@ -25,19 +25,19 @@ logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 partition = os.environ.get("SLURM_JOB_PARTITION", "unknown")
 benchmarks = list(
-    (m, mlp, t, s) for s, m, mlp, t in itertools.product(
-    ['ode', 'sde', 'langevin'], MODELS.keys(), ['time_mlp'], sbibm.get_available_tasks()
+    (m, t, s) for s, m, t in itertools.product(
+    ['ode', 'sde', 'langevin'], MODELS.keys(), sbibm.get_available_tasks()
 ) if is_compatible(m, s)
 ) # 320 jobs, first 180 are ODE
 
-model_name, subnet, task_name, sampler_family = benchmarks[job_id]
+model_name, task_name, sampler_family = benchmarks[job_id]
 BASE = Path(__file__).resolve().parent
 metrics_dir = BASE / 'metrics'
 models_dir = BASE / 'models'
 #metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics')
 #models_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/models')
 
-logging.info(f"Running job {job_id} with model {model_name}, subnet {subnet}, task {task_name}, sampler {sampler_family}.")
+logging.info(f"Running job {job_id} with model {model_name}, task {task_name}, sampler {sampler_family}.")
 task = sbibm.get_task(task_name)
 conf_tuple = MODELS[model_name]
 if sampler_family == 'ode':
@@ -50,10 +50,6 @@ else:
 sim_budget = 'online'
 if 'offline' in model_name:
     sim_budget = NUM_BATCHES_PER_EPOCH*BATCH_SIZE
-
-if subnet == 'time_mlp':
-    # load_model will set the subnet accordingly
-    model_name += '_time_mlp'
 
 #%%
 if task_name == 'lotka_volterra':

@@ -16,8 +16,8 @@ def model_sampler_key(_model: str, _sampler: str) -> str:
     return f"{_model}-{_sampler}"
 
 benchmarks = list(
-    (m, mlp, t, s) for s, m, mlp, t in itertools.product(
-    SAMPLER_SETTINGS, MODELS.keys(), ['time_mlp'], sbibm.get_available_tasks()
+    (m, t, s) for s, m, t in itertools.product(
+    SAMPLER_SETTINGS, MODELS.keys(), sbibm.get_available_tasks()
 ) if is_compatible(m, s)
 )
 BASE = Path(__file__).resolve().parent
@@ -29,7 +29,7 @@ sampler_names = list(SAMPLER_SETTINGS.keys())
 tasks = sbibm.get_available_tasks()
 task_to_idx = {t: i for i, t in enumerate(tasks)}
 n_tasks = len(sbibm.get_available_tasks())
-keys = [model_sampler_key(m+ ('_time_mlp' if subnet == 'time_mlp' else ''), s) for m, subnet, _, s in benchmarks]
+keys = [model_sampler_key(m, s) for m, _, s in benchmarks]
 def nan_matrix():
     return {k: np.full(n_tasks, np.nan, dtype=float) for k in keys}
 
@@ -40,14 +40,14 @@ results_mad = nan_matrix()
 times = nan_matrix()
 times_std = nan_matrix()
 
-for model_name, subnet, task_name, sampler_name in benchmarks:
-    model_name = model_name + ('_time_mlp' if subnet == 'time_mlp' else '')
+for model_name, task_name, sampler_name in benchmarks:
+    model_name = model_name
     pkl = metrics_dir / f'c2st_results_{model_name}_{task_name}_{sampler_name}.pkl'
     if os.path.exists(pkl):
         with open(pkl, 'rb') as f:
             c2st_results = pickle.load(f)
     else:
-        logging.warning(f"Missing results for {model_name}, {subnet} on {task_name} with {sampler_name}, skipping.")
+        logging.warning(f"Missing results for {model_name} on {task_name} with {sampler_name}, skipping.")
         continue
 
     task_i = task_to_idx.get(task_name)
@@ -71,18 +71,13 @@ for key in keys:
         continue
     model = key.split("-")[0]
     rest = key.split("-")[1:]
-    if 'time_mlp' in model:
-        model = model.replace('_time_mlp', '')
-        subnet = 'time_mlp'
-    else:
-        subnet = 'mlp'
     sampler = "-".join(rest)
     duplicates.append(key)
     for task_idx, task_name in enumerate(tasks):
         rows.append({
             'model': model,
             'sampler': sampler,
-            'subnet': subnet,
+            'subnet': 'time_mlp',
             'task': task_name,
             'c2st': results_mean[key][task_idx],
             'c2st_std': results_std[key][task_idx],
