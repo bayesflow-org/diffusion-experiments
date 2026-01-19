@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.4"
+__generated_with = "0.19.4"
 app = marimo.App(
     app_title="Tutorial: Simulation-Based Inference using Diffusion Models",
     css_file="",
@@ -11,8 +11,7 @@ with app.setup:
     import marimo as mo
 
     import os
-    if "KERAS_BACKEND" not in os.environ:
-        os.environ["KERAS_BACKEND"] = "jax"
+    os.environ["KERAS_BACKEND"] = "jax"
 
 
 @app.cell(hide_code=True)
@@ -63,7 +62,7 @@ def _():
 
     logging.getLogger("bayesflow").setLevel(logging.ERROR)
     np.random.seed(42)
-    return InverseKinematicsModel, bf, keras, np, plt, tqdm
+    return InverseKinematicsModel, bf, keras, np, plt
 
 
 @app.cell(hide_code=True)
@@ -358,7 +357,7 @@ def _(bf, np, prior_samples, variable_names_nice, workflow_kinematics_example):
     # Test amortized inference on new data
     obs = {"observables": np.array([[0, 1.5]])}
 
-    # Instant inference via forward pass!
+    # Fast inference
     _posterior_samples = workflow_kinematics_example.sample(
         conditions=obs,
         num_samples=1000
@@ -434,11 +433,7 @@ def _(adapter, bf, keras, simulator, training_data):
                 epochs=100,
                 batch_size=128
             )
-    return (
-        workflow_kinematics_consistency,
-        workflow_kinematics_diffusion,
-        workflows,
-    )
+    return workflow_kinematics_diffusion, workflows
 
 
 @app.cell
@@ -476,13 +471,19 @@ def _():
 
 
 @app.cell
-def _(variable_names_nice, workflow_kinematics_consistency):
-    workflow_kinematics_consistency.plot_default_diagnostics(
-        test_data=100,
-        num_samples=500,
-        variable_names=variable_names_nice 
+def _(bf, variable_names_nice, workflow_kinematics_diffusion):
+    test_data = workflow_kinematics_diffusion.simulator.sample(100)
+
+    posterior_samples_test_data = workflow_kinematics_diffusion.sample(
+        conditions=test_data,
+        num_samples=100,
     )
-    # note: we used a consistency model here, as it is faster during inference
+
+    bf.diagnostics.plots.coverage(
+        estimates=posterior_samples_test_data,
+        targets=test_data,
+        variable_names=variable_names_nice
+    )
     return
 
 
@@ -541,7 +542,7 @@ def _(
     variable_names_nice,
     workflow_kinematics_diffusion,
 ):
-    parameters_0 = training_data['parameters'][:100]
+    parameters_0 = training_data['parameters'][:1000]
     _t_current = t_slider_forward.value
     _log_snr = workflow_kinematics_diffusion.approximator.inference_network.noise_schedule.get_log_snr(_t_current, training=True)
     _alpha_t, _sigma_t = workflow_kinematics_diffusion.approximator.inference_network.noise_schedule.get_alpha_sigma(_log_snr)
@@ -552,9 +553,12 @@ def _(
     # Create visualization
     bf.diagnostics.pairs_posterior(
         estimates=keras.ops.convert_to_numpy(parameters_t),
-        priors=np.random.normal(size=(100, 4)),
+        priors=parameters_0,
         variable_names=variable_names_nice,
-        height=1.75
+        height=1.75,
+        label=f'Parameters at t={_t_current}',
+        show_single_legend=True,
+        post_color='teal'
     )
     return
 
@@ -580,18 +584,16 @@ def _():
     - post-hoc modifications during inference.
 
 
-    Below we implement a simple Euler-style solver which integrates the learned reverse dynamics
+    Below we use a SDE solver which integrates the learned reverse dynamics
     from $t=1$ (noise) down to $t=0$ (posterior samples).
 
-    This is not meant to be a production-grade sampler; it is included to make the sampling process explicit.
-    BayesFlow provides built-in sampling implementations, but seeing the loop helps build intuition:
-    sampling is *iterative denoising*, not a single network forward pass.
+    Important: Sampling is *iterative denoising*, not a single network forward pass.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _():
+def _(keras, workflow_kinematics_diffusion):
     t_slider_backward = mo.ui.slider(
             start=0.0,
             stop=1.0,
@@ -600,65 +602,38 @@ def _():
             label="Diffusion time t:",
             show_value=True
         )
+
+    priors = workflow_kinematics_diffusion.approximator.inference_network.base_distribution.sample(100)
+    priors = workflow_kinematics_diffusion.approximator.standardize_layers["inference_variables"](priors, forward=False)  # to original space
+    priors = keras.ops.convert_to_numpy(priors)
+
     t_slider_backward
-    return (t_slider_backward,)
+    return priors, t_slider_backward
 
 
 @app.cell(hide_code=True)
 def _(
     bf,
     keras,
-    np,
     obs,
+    priors,
     t_slider_backward,
-    tqdm,
     variable_names_nice,
     workflow_kinematics_diffusion,
 ):
-    def euler_backward(workflow, conditions, num_samples, steps=100):
-        conditions_prep = workflow.approximator._prepare_data(conditions)['inference_conditions']
-        batch_size = keras.ops.shape(conditions_prep)[0]
-        inference_conditions = keras.ops.expand_dims(conditions_prep, axis=1)
-        inference_conditions = keras.ops.broadcast_to(
-                        inference_conditions, (batch_size, num_samples, *keras.ops.shape(inference_conditions)[2:])
-        )
-
-        t_start, t_end = 1.0, 0.0
-        dt = (t_end - t_start) / steps  # negative if integrating toward 0
-        x = workflow.approximator.inference_network.base_distribution.sample((1, num_samples))
-        t = float(t_start)
-
-        for k in tqdm(range(steps), unit='step'):
-            if t <= t_slider_backward.value:
-                break
-            # for diffusion models, we can use a stochastic solver
-            drift_term = workflow.approximator.inference_network.velocity(
-                xz=x, time=t, conditions=inference_conditions, 
-                stochastic_solver=True, training=False
-                )
-            diffusion_term = workflow.approximator.inference_network.diffusion_term(
-                    xz=x, time=t, training=False
-            )
-            noise = keras.random.normal(keras.ops.shape(x), dtype=keras.ops.dtype(x)) * np.sqrt(np.abs(dt))
-
-            x = x + dt * drift_term + diffusion_term * noise
-            t = t + dt
-
-        if t != 1.0:
-            x = workflow.approximator.standardize_layers["inference_variables"](x, forward=False)
-        return x
-
-    estimated_parameters_t = euler_backward(
-        workflow_kinematics_diffusion, 
+    estimated_parameters_t = workflow_kinematics_diffusion.sample(
         conditions=obs,
-        num_samples=100
+        num_samples=100,
+        stop_time=t_slider_backward.value
     )
+    estimated_parameters_t = keras.ops.convert_to_numpy(estimated_parameters_t['parameters'][0])
 
     bf.diagnostics.pairs_posterior(
-        estimates=keras.ops.convert_to_numpy(estimated_parameters_t[0]),
-        priors=np.random.normal(size=(100, 4)),
+        estimates=estimated_parameters_t,
+        priors=priors,
         variable_names=variable_names_nice,
-        height=1.75
+        height=1.75,
+        label=f'Denoised Posterior at t={t_slider_backward.value}'
     )
     return
 
@@ -775,168 +750,6 @@ def _():
     return
 
 
-@app.cell(hide_code=True)
-def _(keras):
-    # ---------------------------
-    # Time schedule h(t)
-    # ---------------------------
-    def make_time_schedule(workflow, h0, h1):
-        """
-        Returns h(t) where t goes 1 -> 0 in sampling.
-        Penalty strength increases as t -> 0 (late in sampling).
-        """
-
-        def h_of_t(t):
-            log_snr = workflow.approximator.inference_network.noise_schedule.get_log_snr(t, training=False)
-            alpha_t, sigma_t = workflow.approximator.inference_network.noise_schedule.get_alpha_sigma(log_snr)
-            frac = 1.0 - (alpha_t ** 2) / (alpha_t ** 2 + sigma_t ** 2)
-            return h0 + (h1 - h0) * frac
-        return h_of_t
-
-
-    # ---------------------------
-    # Soft constraint log-prob
-    # ---------------------------
-    def constraint_logprob(zt, t, constraints, h_of_t):
-        """
-        Computes:
-            Σ_k log sigmoid( -h(t) * c_k(zt) )
-        in a numerically stable way:
-            log sigmoid(-u) = -softplus(u)
-
-        Each constraint c_k(zt) must be satisfied when c_k(zt) <= 0.
-        Expected c_k(zt) output shape: (B, S) or broadcastable to (B, S).
-        """
-        ht = h_of_t(t)
-        total = 0.0
-        for c in constraints:
-            ck = c(zt)
-            total = total - keras.ops.softplus(ht * ck)
-        return total
-
-
-    # ---------------------------
-    # Backend-agnostic guidance term
-    # ---------------------------
-    def constraint_guidance_term(
-        zt,
-        t,
-        constraints,
-        lam,
-        h_of_t=None,
-        reduce="sum",
-    ):
-        """
-        Backend-agnostic implementation of:
-            ∇_zt Σ_k log sigmoid( -h(t) * c_k(zt) )
-
-        Args:
-            zt: diffusion state, shape (B, S, D)
-            t: scalar float (Python float) or scalar tensor
-            constraints: list[callable], each c_k(zt) -> (B, S) (or broadcastable)
-            lam: guidance strength λ
-            h_of_t: callable h(t) -> scalar/tensor
-            reduce: "sum" or "mean" reduction over (B,S)
-
-        Returns:
-            guidance drift correction with same shape as zt.
-        """
-        if lam <= 0:
-            return keras.ops.zeros_like(zt)
-
-        if h_of_t is None:
-            h_of_t = lambda t: 10.0
-
-        backend = keras.backend.backend()
-        if backend == "jax":
-            import jax
-
-            def objective_fn(z):
-                logp = constraint_logprob(z, t, constraints, h_of_t)
-                return keras.ops.sum(logp) if reduce == "sum" else keras.ops.mean(logp)
-
-            grad = jax.grad(objective_fn)(zt)
-            return lam * grad
-
-        raise NotImplementedError(f"Unsupported backend: {backend}")
-
-
-    # ---------------------------
-    # Guided sampler
-    # ---------------------------
-    def guided_sample(
-        workflow,
-        conditions,
-        num_samples=100,
-        n_steps=100,
-        lam=1.5,
-        constraints=None,
-        reduce="sum",
-        h0=0.0,
-        h1=100.0,
-    ):
-        """
-        Guided reverse diffusion with constraint-based guidance:
-            drift <- drift + λ ∇_z Σ_k log sigmoid(-h(t) c_k(z))
-
-        Args:
-            workflow: BayesFlow workflow
-            conditions: observation dictionary
-            num_samples: posterior samples per observation
-            n_steps: number of diffusion steps
-            lam: guidance strength
-            constraints: list of constraint callables c_k(zt) <= 0 (or None for no guidance)
-            h0, h1: force function h(t) parameters
-
-        Returns:
-            theta_final: samples in parameter space (B, S, 4)
-        """
-        if constraints is None:
-            constraints = []
-
-        conditions_prep = workflow.approximator._prepare_data(conditions)["inference_conditions"]
-        batch_size = keras.ops.shape(conditions_prep)[0]
-
-        inference_conditions = keras.ops.expand_dims(conditions_prep, axis=1)
-        inference_conditions = keras.ops.broadcast_to(
-            inference_conditions,
-            (batch_size, num_samples, *keras.ops.shape(inference_conditions)[2:])
-        )
-
-        t_start, t_end = 1.0, 0.0
-        dt = (t_end - t_start) / float(n_steps)  # negative
-        x = workflow.approximator.inference_network.base_distribution.sample((batch_size, num_samples))
-        t = float(t_start)
-
-        h_of_t = make_time_schedule(workflow=workflow, h0=h0, h1=h1)
-
-        for _ in range(n_steps):
-            drift = workflow.approximator.inference_network.velocity(
-                xz=x,
-                time=t,
-                conditions=inference_conditions,
-                stochastic_solver=True,
-                training=False,
-            )
-            diff = workflow.approximator.inference_network.diffusion_term(
-                xz=x, time=t, training=False
-            )
-
-            if lam > 0 and len(constraints) > 0:
-                g = constraint_guidance_term(
-                    x, t, constraints, lam=lam, h_of_t=h_of_t, reduce=reduce
-                )
-                drift = drift + g
-
-            noise = keras.random.normal(keras.ops.shape(x), dtype=keras.ops.dtype(x))
-            x = x + dt * drift + diff * noise * keras.ops.sqrt(keras.ops.abs(dt))
-            t = t + dt
-
-        theta_final = workflow.approximator.standardize_layers["inference_variables"](x, forward=False)
-        return theta_final
-    return (guided_sample,)
-
-
 @app.cell
 def _(keras):
     def elbow_up_down_constraint(workflow, target="elbow-up"):
@@ -947,18 +760,18 @@ def _(keras):
             constraint is satisfied  <=>  c(zt) <= 0
 
         - If target="elbow-up":
-              c(zt) =  sin(a1)    -> wants sin(a1) <= 0
+              c(zt) =  -sin(a1)    -> wants sin(a1) >= 0
         - If target="elbow-down":
-              c(zt) = -sin(a1)    -> wants sin(a1) >= 0
+              c(zt) = sin(a1)    -> wants sin(a1) <= 0
         """
-        sign = 1.0 if target == "elbow-up" else -1.0
+        sign = -1.0 if target == "elbow-up" else 1.0
 
-        def c_elbow(zt):
-            theta = workflow.approximator.standardize_layers["inference_variables"](zt, forward=False)
+        def c_elbow(z):
+            theta = workflow.approximator.standardize_layers["inference_variables"](z, forward=False)
             a1 = theta[..., 1]
             return sign * keras.ops.sin(a1)
 
-        return [c_elbow]
+        return c_elbow
     return (elbow_up_down_constraint,)
 
 
@@ -966,7 +779,7 @@ def _(keras):
 def _():
     # UI controls
     mode = mo.ui.radio(options=["elbow-up", "elbow-down"], value="elbow-up", label="Steering target:")
-    strength = mo.ui.slider(start=0.0, stop=10.0, step=0.5, value=0, label="Guidance strength λ:", show_value=True)
+    strength = mo.ui.slider(start=0.0, stop=1, step=0.01, value=0, label="Guidance strength λ:", show_value=True)
 
     mo.hstack([mode, strength])
     return mode, strength
@@ -975,39 +788,40 @@ def _():
 @app.cell(hide_code=True)
 def _(
     InverseKinematicsModel,
+    alpha,
     elbow_up_down_constraint,
-    guided_sample,
-    keras,
     mode,
     obs,
+    ops,
     plt,
     strength,
     workflow_kinematics_diffusion,
 ):
     # Draw samples with and without guidance for side-by-side comparison
-    constraints = elbow_up_down_constraint(
+    constraints = [elbow_up_down_constraint(
         workflow_kinematics_diffusion, target=str(mode.value)
-    )
+    )]
 
-    theta_guided = guided_sample(
-         workflow_kinematics_diffusion,
+    def scaling_function(t):
+        log_snr = workflow_kinematics_diffusion.approximator.inference_network.noise_schedule.get_log_snr(t, training=False)
+        _, sigma_t = workflow_kinematics_diffusion.approximator.inference_network.noise_schedule.get_alpha_sigma(log_snr)
+        return ops.square(alpha) / ops.square(sigma_t)
+
+    theta_unguided = workflow_kinematics_diffusion.sample(
          conditions=obs,
          num_samples=500,
-         n_steps=100,
-         lam=float(strength.value),
-         constraints=constraints,
     )
-    theta_guided_np = keras.ops.convert_to_numpy(theta_guided[0])
+    theta_unguided = theta_unguided['parameters'][0]
 
-    theta_unguided = guided_sample(
-         workflow_kinematics_diffusion,
+    theta_guided = workflow_kinematics_diffusion.sample(
          conditions=obs,
          num_samples=500,
-         n_steps=100,
-         lam=0.0, # no guidance
-         constraints=constraints,
+         constraint_guidance=dict(
+             constraints=constraints, 
+             guidance_strength=float(strength.value),
+         )
     )
-    theta_unguided_np = keras.ops.convert_to_numpy(theta_unguided[0])
+    theta_guided = theta_guided['parameters'][0]
 
     # Visualize effect on arm configurations 
     fig, ax = plt.subplots(1, 2, figsize=(10, 4), subplot_kw=dict(box_aspect=1.0), layout="constrained")
@@ -1017,13 +831,13 @@ def _(
 
     model_left.update_plot_ax(
         ax[0],
-        theta_unguided_np,
+        theta_unguided,
         obs["observables"][0, ::-1],
         exemplar_color="#e6e7eb",
     )
     model_right.update_plot_ax(
         ax[1],
-        theta_guided_np,
+        theta_guided,
         obs["observables"][0, ::-1],
         exemplar_color="#e6e7eb",
     )
