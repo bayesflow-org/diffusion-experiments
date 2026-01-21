@@ -10,6 +10,8 @@ Several case studies illustrating the application of diffusion models in SBI:
 - case_study3: Gaussian-Random-Field task.
 - case_study4: Compositional score matching example.
 
+Moreover, a tutorial on diffusion models for SBI is provided as marimo-notebook: [tutorial.py](https://bayesflow-org.github.io/diffusion-experiments/).
+
 ## Requirements
 - Python 3.11+
 - [uv](https://github.com/astral-sh/uv) package manager

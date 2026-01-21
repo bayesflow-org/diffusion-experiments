@@ -300,6 +300,59 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
 <!-- End image carousel -->
 
 
+    <section class="hero is-small">
+  <div class="hero-body">
+    <div class="container">
+
+      <div id="marimo-wrapper" style="border: 1px solid #ddd; border-radius: 8px; padding: 1rem;">
+
+        <button id="load-marimo" type="button"
+          style="padding: .5rem .75rem; border: 1px solid #ccc; border-radius: 6px; background: white; cursor: pointer;">
+          <strong>Show me the tutorial notebook</strong>
+        </button>
+
+        <noscript>
+          <p style="margin-top: 0.75rem;">
+            JavaScript is required to display the notebook. You can open it directly:
+            <a href="static/tutorial_plain.html">static/tutorial_plain.html</a>
+          </p>
+        </noscript>
+      </div>
+
+      <div id="marimo-frame-slot" style="margin-top: 1rem;"></div>
+
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    const btn = document.getElementById("load-marimo");
+    const slot = document.getElementById("marimo-frame-slot");
+    const wrapper = document.getElementById("marimo-wrapper");
+
+    btn.addEventListener("click", function () {
+      // prevent double insertion
+      if (slot.firstChild) return;
+
+      const iframe = document.createElement("iframe");
+      iframe.src = "static/tutorial_plain.html";
+      iframe.style.width = "100%";
+      iframe.style.height = "100vh";
+      iframe.style.border = "none";
+
+      // privacy / containment
+      iframe.setAttribute("referrerpolicy", "no-referrer");
+      iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups");
+
+      slot.appendChild(iframe);
+
+      // optional: replace the hint after loading
+      wrapper.innerHTML =
+        '<p style="margin:0;"><strong>Tutorial</strong></p>';
+    });
+  })();
+</script>
 
 <!--BibTex citation -->
   <section class="section" id="BibTeX">
@@ -349,6 +402,22 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
           <span>jonas.arruda</span> [at] <span>uni-bonn.de</span>
         </p>
       </details>
+       <details style="margin-top: 0.5rem;">
+    <summary style="cursor:pointer;">Privacy</summary>
+
+    <p><strong>Hosting.</strong> This website is hosted via GitHub Pages (GitHub, Inc.).</p>
+
+    <p><strong>Server logs.</strong> When accessing this website, technical data may be processed
+      (e.g., IP address, date/time of access, requested resources, browser/OS information, referrer URL).</p>
+
+    <p><strong>No analytics.</strong> This website does not use tracking cookies or analytics tools.</p>
+
+    <p><strong>Embedded marimo notebook.</strong> The tutorial notebook is loaded only after clicking a button.
+      When loaded, required assets are fetched from the jsDelivr CDN (<code>cdn.jsdelivr.net</code>),
+      which receives technical access data (e.g., IP address and browser information) in order to deliver these files.</p>
+
+    <p><strong>Contact.</strong> For privacy-related requests: jonas.arruda [at] uni-bonn.de</p>
+  </details>
     </div>
 
   </div>

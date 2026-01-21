@@ -524,7 +524,7 @@ def _():
             start=0.0,
             stop=1.0,
             step=0.05,
-            value=0.0,
+            value=0.8,
             label="Diffusion time t:",
             show_value=True
         )
