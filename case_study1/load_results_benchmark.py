@@ -11,6 +11,11 @@ import sbibm
 
 from case_study1.model_settings_benchmark import MODELS, SAMPLER_SETTINGS, is_compatible
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="JULIA_SYSIMAGE_DIFFEQTORCH not set"
+)
 
 def model_sampler_key(_model: str, _sampler: str) -> str:
     return f"{_model}-{_sampler}"

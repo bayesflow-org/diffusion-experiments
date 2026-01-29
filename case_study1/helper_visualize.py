@@ -9,6 +9,12 @@ import sbibm
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="JULIA_SYSIMAGE_DIFFEQTORCH not set"
+)
+
 BASE = Path(__file__).resolve().parent
 
 
@@ -415,7 +421,6 @@ def plot_benchmark_results_plotly(df):
 
     problem_names = sbibm.get_available_tasks()
     problem_names_nice = np.array([sbibm.get_task(p).name_display for p in problem_names])
-    task_name_nice = problem_names_nice.copy()
     problem_dim = [sbibm.get_task(p).dim_parameters for p in problem_names]
     data_dim = [sbibm.get_task(p).dim_data for p in problem_names]
 
@@ -457,8 +462,8 @@ def plot_benchmark_results_plotly(df):
     shown_labels = set()
 
     for plot_idx, problem_idx in enumerate(problem_order):
-        col = plot_idx // (n_problems // 2) + 1
-        row = plot_idx % (n_problems // 2) + 1
+        row = plot_idx // 2 + 1
+        col = plot_idx % 2 + 1
 
         task_name = problem_names[problem_idx]
         subset = df[df['problem'] == task_name]
@@ -505,7 +510,7 @@ def plot_benchmark_results_plotly(df):
                         '<extra></extra>'
                     ),
                     customdata=[[
-                        task_name_nice[problem_idx],
+                        problem_names_nice[problem_idx],
                         get_model_name_plotly(model_key),
                         get_sampler_name(sampler),
                         model_data['std'].iloc[0]

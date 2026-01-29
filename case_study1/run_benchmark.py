@@ -19,6 +19,11 @@ from keras.utils import clear_session
 from case_study1.model_settings_benchmark import load_model, NUM_BATCHES_PER_EPOCH, BATCH_SIZE, is_compatible
 from case_study1.model_settings_benchmark import MODELS, SAMPLER_SETTINGS, ODE_METHODS, SDE_METHODS, LANGEVIN_METHODS, NUM_STEPS_SAMPLER
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="JULIA_SYSIMAGE_DIFFEQTORCH not set"
+)
 
 logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 

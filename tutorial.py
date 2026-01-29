@@ -51,8 +51,10 @@ def _():
 @app.cell
 def _():
     import logging
+    from pathlib import Path
 
     import numpy as np
+    import pandas as pd
     import matplotlib.pyplot as plt
     import bayesflow as bf
     import keras
@@ -60,9 +62,10 @@ def _():
 
     from intro_example.inverse_kinematics import InverseKinematicsModel
 
+    BASE = Path(__file__).resolve().parent
     logging.getLogger("bayesflow").setLevel(logging.ERROR)
     np.random.seed(42)
-    return InverseKinematicsModel, bf, keras, np, plt
+    return BASE, InverseKinematicsModel, bf, keras, np, pd, plt
 
 
 @app.cell(hide_code=True)
@@ -695,12 +698,9 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _():
-    import pandas as pd
+def _(BASE, pd):
     from case_study1.helper_visualize import plot_benchmark_results_plotly
-    from pathlib import Path
 
-    BASE = Path(__file__).resolve().parent
     plotly_df = pd.read_csv(BASE / 'case_study1' / 'plots' / f'plotly_df.csv')
     plot_benchmark_results_plotly(
         plotly_df
