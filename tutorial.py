@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.4"
+__generated_with = "0.19.6"
 app = marimo.App(
     app_title="Tutorial: Simulation-Based Inference using Diffusion Models",
     css_file="",
@@ -413,7 +413,7 @@ def _(adapter, bf, keras, simulator, training_data):
     workflow_kinematics_consistency = bf.BasicWorkflow(
         adapter=adapter,
         simulator=simulator,
-        inference_network=bf.experimental.StableConsistencyModel(),
+        inference_network=bf.networks.StableConsistencyModel(),
         checkpoint_filepath='intro_example/models',
         checkpoint_name='tutorial_consistency',
         standardize='all'
@@ -598,7 +598,7 @@ def _(keras, workflow_kinematics_diffusion):
             start=0.0,
             stop=1.0,
             step=0.05,
-            value=1.0,
+            value=0.15,
             label="Diffusion time t:",
             show_value=True
         )
@@ -696,7 +696,15 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.image(src="static/images/c2st_benchmark_boxplot_best.jpg")
+    import pandas as pd
+    from case_study1.helper_visualize import plot_benchmark_results_plotly
+    from pathlib import Path
+
+    BASE = Path(__file__).resolve().parent
+    plotly_df = pd.read_csv(BASE / 'case_study1' / 'plots' / f'plotly_df.csv')
+    plot_benchmark_results_plotly(
+        plotly_df
+    )
     return
 
 
@@ -767,7 +775,9 @@ def _(keras):
         sign = -1.0 if target == "elbow-up" else 1.0
 
         def c_elbow(z):
-            theta = workflow.approximator.standardize_layers["inference_variables"](z, forward=False)
+            theta = workflow.approximator.standardize_layers["inference_variables"](
+                z, forward=False
+            )
             a1 = theta[..., 1]
             return sign * keras.ops.sin(a1)
 
@@ -779,7 +789,7 @@ def _(keras):
 def _():
     # UI controls
     mode = mo.ui.radio(options=["elbow-up", "elbow-down"], value="elbow-up", label="Steering target:")
-    strength = mo.ui.slider(start=0.0, stop=1, step=0.01, value=0, label="Guidance strength λ:", show_value=True)
+    strength = mo.ui.slider(start=0.0, stop=1, step=0.01, value=0.85, label="Guidance strength λ:", show_value=True)
 
     mo.hstack([mode, strength])
     return mode, strength
@@ -816,7 +826,7 @@ def _(
     theta_guided = workflow_kinematics_diffusion.sample(
          conditions=obs,
          num_samples=500,
-         constraint_guidance=dict(
+         guidance_constraints=dict(
              constraints=constraints, 
              guidance_strength=float(strength.value),
          )

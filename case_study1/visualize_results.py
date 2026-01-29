@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.4"
+__generated_with = "0.19.6"
 app = marimo.App(width="full")
 
 
@@ -22,7 +22,7 @@ def _():
     sys.path.append(str(PROJECT_ROOT))
 
     from case_study1.model_settings_benchmark import SAMPLER_SETTINGS
-    from case_study1.helper_visualize import plot_benchmark_results, plot_by_sampler, plot_by_model, plot_low_budget_c2st_by_problem, pareto_best_sampler
+    from case_study1.helper_visualize import plot_benchmark_results, plot_by_sampler, plot_by_model, plot_low_budget_c2st_by_problem, pareto_best_sampler, plot_benchmark_results_plotly
     return (
         BASE,
         SAMPLER_SETTINGS,
@@ -30,6 +30,7 @@ def _():
         pareto_best_sampler,
         pd,
         plot_benchmark_results,
+        plot_benchmark_results_plotly,
         plot_by_model,
         plot_by_sampler,
         plot_low_budget_c2st_by_problem,
@@ -50,7 +51,7 @@ def _(BASE, pd):
 @app.cell
 def _(SAMPLER_SETTINGS):
     all_samplers= ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[1]
+    SHOW_SAMPLER = all_samplers[0]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 
@@ -115,6 +116,19 @@ def _(long_df):
     fm_df = long_df[long_df['model'] == 'flow_matching']
     fm_df = fm_df[['sampler', 'c2st', 'time']].sort_values(by='c2st')
     fm_df.head()
+    return
+
+
+@app.cell
+def _(BASE, pd, plot_benchmark_results_plotly):
+    #plotly_df = long_df_reduced[long_df_reduced.model != 'diffusion_cosine_v_lw']
+    #plotly_df.to_csv(BASE / 'plots' / f'plotly_df.csv', index=False)
+    plotly_df = pd.read_csv(BASE / 'plots' / f'plotly_df.csv')
+
+    plot_benchmark_results_plotly(
+        plotly_df,
+        'best'
+    )
     return
 
 

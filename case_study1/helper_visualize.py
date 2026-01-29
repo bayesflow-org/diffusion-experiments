@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 import sbibm
 
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
 BASE = Path(__file__).resolve().parent
 
 
@@ -75,6 +78,34 @@ def get_model_name(k=None):
     }
     if k is None:
         return list(names.keys())
+    return names.get(k, k.replace("_", " ").title())
+
+
+def get_model_name_plotly(k=None):  # without LaTeX
+    names = {
+        "flow_matching": "Flow Matching",
+        "ot_flow_matching": "Flow Matching (OT)",
+        "ot_partial_flow_matching": "Flow Matching (POT)",
+        "cot_flow_matching": "Flow Matching (COT)",
+        "cot_0_02_flow_matching": "Flow Matching (COT, r=0.02)",
+        "cot_0_05_flow_matching": "Flow Matching (COT, r=0.05)",
+        "cot_0_1_flow_matching": "Flow Matching (COT, r=0.1)",
+        "cot_partial_flow_matching": "Flow Matching (CPOT)",
+        "flow_matching_edm": "Flow Matching (ρ = −0.6)",
+        "consistency_model": "Discrete Consistency",
+        "stable_consistency_model": "Continuous Consistency",
+        "diffusion_edm_vp": "VP EDM",
+        "diffusion_edm_ve": "VE EDM",
+        "diffusion_edm_vp_ema": "VP EDM (EMA)",
+        "diffusion_cosine_F": "Cosine F-pred.",
+        "diffusion_cosine_v": "Cosine v-pred.",
+        "diffusion_cosine_v_lw": "Cosine v-pred. (lw)",
+        "diffusion_cosine_noise": "Cosine ε-pred.",
+    }
+
+    if k is None:
+        return list(names.keys())
+
     return names.get(k, k.replace("_", " ").title())
 
 
@@ -370,6 +401,225 @@ def plot_benchmark_results(df, show_sampler, save_path=None):
         fig.savefig(save_path, bbox_inches='tight')
     plt.show()
     return
+
+
+def plot_benchmark_results_plotly(df):
+    """Plot C2ST benchmark results across tasks using Plotly with hover support."""
+    if df['problem'].iloc[0] == 'all':
+        return
+    show_sampler = 'best'
+
+    FONT_AXIS = 11
+    FONT_TITLE = 11
+    MARKER_SIZE = 4
+
+    problem_names = sbibm.get_available_tasks()
+    problem_names_nice = np.array([sbibm.get_task(p).name_display for p in problem_names])
+    task_name_nice = problem_names_nice.copy()
+    problem_dim = [sbibm.get_task(p).dim_parameters for p in problem_names]
+    data_dim = [sbibm.get_task(p).dim_data for p in problem_names]
+
+    problem_order = np.lexsort((data_dim, problem_dim))
+    n_problems = len(problem_order)
+
+    results_lueckmann = get_lueckmann_results()
+    colors = create_model_config()['visualization']['colors']
+
+    fig = make_subplots(
+        rows=n_problems // 2,
+        cols=2,
+        shared_xaxes=True,
+        shared_yaxes=True,
+        subplot_titles=[problem_names_nice[i] for i in problem_order]
+    )
+
+    all_combinations = []
+    for model_key in get_model_name_plotly():
+        model_data = df[df['model'] == model_key]
+        if len(model_data) > 0:
+            sampler = model_data['sampler'].iloc[0]
+            label = get_model_name_plotly(model_key)
+            if 'consistency' not in model_key and show_sampler != 'all':
+                label += f' ({get_sampler_name(sampler)})'
+
+            all_combinations.append({
+                'model': model_key,
+                'sampler': sampler,
+                'label': label,
+                'color': colors.get(model_key, 'gray')
+            })
+
+    combination_to_x = {
+        (combo['model'], combo['sampler']): idx
+        for idx, combo in enumerate(all_combinations)
+    }
+
+    shown_labels = set()
+
+    for plot_idx, problem_idx in enumerate(problem_order):
+        col = plot_idx // (n_problems // 2) + 1
+        row = plot_idx % (n_problems // 2) + 1
+
+        task_name = problem_names[problem_idx]
+        subset = df[df['problem'] == task_name]
+
+        for combo in all_combinations:
+            model_key = combo['model']
+            sampler = combo['sampler']
+
+            model_data = subset[
+                (subset['model'] == model_key) &
+                (subset['sampler'] == sampler)
+            ]
+
+            if len(model_data) == 0:
+                continue
+
+            x_pos = combination_to_x[(model_key, sampler)]
+            show_legend = combo['label'] not in shown_labels
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[x_pos],
+                    y=[model_data['c2st'].iloc[0]],
+                    error_y=dict(
+                        type='data',
+                        array=[model_data['std'].iloc[0]],
+                        visible=True
+                    ),
+                    mode='markers',
+                    marker=dict(
+                        size=MARKER_SIZE,
+                        color=combo['color'],
+                        line=dict(width=0.5)
+                    ),
+                    name=combo['label'],
+                    legendgroup=combo['label'],
+                    showlegend=show_legend,
+                    hovertemplate=(
+                        '<b>Task:</b> %{customdata[0]}<br>'
+                        '<b>Model:</b> %{customdata[1]}<br>'
+                        '<b>Sampler:</b> %{customdata[2]}<br>'
+                        '<b>C2ST:</b> %{y:.3f}<br>'
+                        '<b>Std:</b> %{customdata[3]:.3f}'
+                        '<extra></extra>'
+                    ),
+                    customdata=[[
+                        task_name_nice[problem_idx],
+                        get_model_name_plotly(model_key),
+                        get_sampler_name(sampler),
+                        model_data['std'].iloc[0]
+                    ]]
+                ),
+                row=row,
+                col=col
+            )
+
+            if show_legend:
+                shown_labels.add(combo['label'])
+
+        ref_data = results_lueckmann.loc[
+            results_lueckmann['task'] == task_name
+        ]
+
+        if len(ref_data) > 0:
+            ref_val = ref_data['C2ST'].iloc[0]
+            show_legend = 'Lueckmann et al. NPE' not in shown_labels
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[-0.5, len(all_combinations) - 0.5],
+                    y=[ref_val, ref_val],
+                    mode='lines',
+                    line=dict(color='black', dash='dash', width=1),
+                    name='Lueckmann et al. NPE',
+                    showlegend=show_legend,
+                    legendgroup='reference',
+                    hovertemplate=(
+                        '<b>Task:</b> %{customdata}<br>'
+                        '<b>Reference C2ST:</b> %{y:.3f}'
+                        '<extra></extra>'
+                    ),
+                    customdata=[task_name]
+                ),
+                row=row,
+                col=col
+            )
+
+            if show_legend:
+                shown_labels.add('Lueckmann et al. NPE')
+
+        fig.update_xaxes(
+            range=[-0.5, len(all_combinations) - 0.5],
+            showticklabels=False,
+            row=row,
+            col=col
+        )
+
+        fig.update_yaxes(
+            range=[0.48, 1.0],
+            row=row,
+            col=col
+        )
+
+    fig.update_layout(
+        height=600,
+        width=700,
+        hovermode='closest',
+        legend=dict(
+            orientation="v",
+            x=1.0,
+            y=1.0,
+            xanchor='left',
+            yanchor='top',
+        ),
+        margin=dict(
+            t=40,
+            b=80,
+            l=60,
+            r=260,
+        ),
+    )
+
+    fig.update_yaxes(
+        title_text=r'$\mathrm{C2ST}$',
+        row=1,
+        col=1,
+        title_font=dict(size=FONT_AXIS),
+        tickfont=dict(size=FONT_AXIS),
+    )
+    fig.update_yaxes(
+        title_text=r'$\mathrm{C2ST}$',
+        row=2,
+        col=1,
+        title_font=dict(size=FONT_AXIS),
+        tickfont=dict(size=FONT_AXIS),
+    )
+    fig.update_yaxes(
+        title_text=r'$\mathrm{C2ST}$',
+        row=3,
+        col=1,
+        title_font=dict(size=FONT_AXIS),
+        tickfont=dict(size=FONT_AXIS),
+    )
+    fig.update_yaxes(
+        title_text=r'$\mathrm{C2ST}$',
+        row=4,
+        col=1,
+        title_font=dict(size=FONT_AXIS),
+        tickfont=dict(size=FONT_AXIS),
+    )
+    fig.update_yaxes(
+        title_text=r'$\mathrm{C2ST}$',
+        row=5,
+        col=1,
+        title_font=dict(size=FONT_AXIS),
+        tickfont=dict(size=FONT_AXIS),
+    )
+
+    fig.update_annotations(font_size=FONT_TITLE)
+
+    return fig
 
 
 def plot_by_sampler(df, col='c2st', col_std='std', save_path=None):
