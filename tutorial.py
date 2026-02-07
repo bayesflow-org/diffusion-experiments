@@ -20,7 +20,6 @@ with app.setup(hide_code=True):
     import pandas as pd
     import matplotlib.pyplot as plt
     import keras
-    from tqdm import tqdm
 
     from intro_example.inverse_kinematics import InverseKinematicsModel
 
@@ -171,14 +170,14 @@ def _():
     mo.md(r"""
     ## SBI in [BayesFlow](https://bayesflow.org)
 
-    BayesFlow is a flexible python library for simulation-based inference with neural networks, including diffusion models.
+    BayesFlow is a flexible Python library for simulation-based inference with neural networks, including diffusion models.
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _():
-    mo.image(src="static/images/bayesflow_landing_light.jpg", caption="BayesFlow: a Python library for simulation-based Amortized Bayesian Inference with neural networks. ")
+    mo.image(src="static/images/bf_landing_light.png", caption="BayesFlow: a Python library for simulation-based amortized Bayesian inference with neural networks. ")
     return
 
 
@@ -234,10 +233,10 @@ def _():
 
 
 @app.function
-def prior():
+def prior() -> dict[str, np.ndarray]:
     """
     Generates a random draw from a 4-dimensional Gaussian prior distribution with a
-    spherical convariance matrix. The parameters represent a robot's arm 
+    spherical covariance matrix. The parameters represent a robot's arm
     configuration, with the first parameter indicating the arm's height and the 
     remaining three are angles.
 
@@ -255,7 +254,7 @@ def _():
     # Inverse Kinematics
     def observation_model(
         parameters
-    ) -> np.ndarray:
+    ) -> dict[str, np.ndarray]:
         """
         Returns the 2D coordinates of a robot arm given parameter vector.
         The first parameter represents the arm's height and the remaining three
@@ -300,7 +299,6 @@ def _(bf, observation_model):
     # now we create the simulator and generate training data
     n_simulations = 10000
     training_data = simulator.sample(n_simulations)
-    prior_samples = training_data['parameters']
 
     print(f"Generated {n_simulations} simulations")
     print(f"Data shape: {training_data['observables'].shape}")
@@ -373,7 +371,7 @@ def _(bf, simulator, training_data, variable_names_nice):
     _ax[2].set_title('Random Simulation 3')
     plt.show()
 
-    def plot_predicitve_distribution(posterior_samples, obs):
+    def plot_arm_posterior(posterior_samples, obs):
         _, _ax = plt.subplots(figsize=(3,3))
 
         _m = InverseKinematicsModel(
@@ -384,9 +382,9 @@ def _(bf, simulator, training_data, variable_names_nice):
             obs['observables'][0, ::-1], 
             exemplar_color="#E7298A"
         )
-        _ax.set_title('Posterior Predictive')
+        _ax.set_title('Arm Configurations')
         plt.show()
-    return plot_params_kinematic, plot_predicitve_distribution
+    return plot_arm_posterior, plot_params_kinematic
 
 
 @app.cell
@@ -497,8 +495,8 @@ def _():
 @app.cell
 def _(
     obs,
+    plot_arm_posterior,
     plot_params_kinematic,
-    plot_predicitve_distribution,
     training_data,
     workflow_kinematics_diffusion,
 ):
@@ -514,7 +512,7 @@ def _(
     )
 
     # simulate the posterior samples and plot them
-    plot_predicitve_distribution(posterior_samples_single, obs)
+    plot_arm_posterior(posterior_samples_single, obs)
     return
 
 
@@ -557,7 +555,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(workflow_kinematics_diffusion):
+def _():
     t_slider_backward = mo.ui.slider(
             start=0.0,
             stop=1.0,
@@ -567,11 +565,6 @@ def _(workflow_kinematics_diffusion):
             show_value=True,
             debounce=True
         )
-
-    priors = workflow_kinematics_diffusion.approximator.inference_network.base_distribution.sample(100)
-    if 'inference_variables' in workflow_kinematics_diffusion.approximator.standardize_layers:
-        priors = workflow_kinematics_diffusion.approximator.standardize_layers["inference_variables"](priors, forward=False)  # to original space
-    priors = keras.ops.convert_to_numpy(priors)
 
     t_slider_backward
     return (t_slider_backward,)
@@ -718,7 +711,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.image(src="static/images/fm_cm_visual.pdf", caption="Flow Matching and Consistency Models as alternative parameterizations of diffusion models.")
+    mo.image(src="static/images/fm_cm_visual.pdf", caption="Flow matching and consistency models as alternative parameterizations of diffusion models.")
     return
 
 
@@ -726,8 +719,8 @@ def _():
 def _():
     mo.md(r"""
     Related generative models can be considered a different *parameterization* of a **diffusion model**:
-    - **flow matching**: we directly predict the vector field of the deterministic reverse path
-    - **consistency models**: designed for very fast sampling by learning to jump directly to clean samples
+    - **Flow matching**: we directly predict the vector field of the deterministic reverse path
+    - **Consistency models**: designed for very fast sampling by learning to jump directly to clean samples
 
     All of these models are available in BayesFlow. So let's load some trained models and compare their performance on our inverse kinematics problem!
     """)
@@ -810,9 +803,9 @@ def _(obs, workflows):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    There are lots of choices to make when designing a diffusion model
-    - which noise schedule?
-    - diffusion model vs. other generative models?
+    There are lots of choices to make when designing a diffusion model, e.g.:
+    - Which noise schedule?
+    - Diffusion model vs. other generative models?
 
     We explained and benchmarked them extensively in [Arruda et al. (2025)](https://arxiv.org/abs/2512.20685):
     """)
@@ -921,16 +914,11 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(alpha, mode, obs, ops, strength, workflow_kinematics_diffusion):
+def _(mode, obs, strength, workflow_kinematics_diffusion):
     # Draw samples with and without guidance for side-by-side comparison
     constraints = [elbow_up_down_constraint(
         workflow_kinematics_diffusion, target=str(mode.value)
     )]
-
-    def scaling_function(t):
-        log_snr = workflow_kinematics_diffusion.approximator.inference_network.noise_schedule.get_log_snr(t, training=False)
-        _, sigma_t = workflow_kinematics_diffusion.approximator.inference_network.noise_schedule.get_alpha_sigma(log_snr)
-        return ops.square(alpha) / ops.square(sigma_t)
 
     theta_unguided = workflow_kinematics_diffusion.sample(
          conditions=obs,
@@ -970,15 +958,6 @@ def _(alpha, mode, obs, ops, strength, workflow_kinematics_diffusion):
     ax[0].set_title("Posterior samples")
     ax[1].set_title(f"Guided posterior samples ({mode.value}, λ={strength.value})")
     plt.show()
-
-    # Also show parameter-pair plots for guided vs unguided
-    #bf.diagnostics.pairs_posterior(
-    #    estimates=theta_guided_np,
-    #    priors=theta_unguided_np,
-    #    variable_names=variable_names_nice,
-    #    height=1.75,
-    #    label='Guided Posterior'
-    #)
     return
 
 
@@ -992,27 +971,27 @@ def _():
     **Main takeaways:**
 
     1. **SBI is likelihood-free Bayesian inference**:
-       we avoid evaluating $p(\mathbf{x}\mid\boldsymbol\theta)$ and train purely from simulations.
+       We avoid evaluating $p(\mathbf{x}\mid\boldsymbol\theta)$ and train purely from simulations.
 
     2. **Amortization makes inference cheap at test time**:
-       after training, we can sample approximate posteriors for new observations instantly.
+       After training, we can sample approximate posteriors for new observations instantly.
 
     3. **Diffusion models provide strong posterior expressiveness**:
-       iterative denoising can represent complex and multimodal posteriors more reliably than many single-pass density models.
+       Iterative denoising can represent complex and multimodal posteriors more reliably than many single-pass density models.
 
     4. **Diffusion models allow post-hoc intervention**:
-       we can compose information from multiple sources or apply constraints at inference time.
+       We can compose information from multiple sources or apply constraints at inference time.
 
 
     **Recommended next steps:**
 
-    Check out the [BayesFlow Documentation](https://bayesflow.org) for
+    Check out [BayesFlow](https://bayesflow.org) for
     - exploring learned summary networks for higher-dimensional observations,
     - evaluating calibration and coverage using diagnostic tools, like simulation-based calibration.
 
     **Further reading:**
 
-    Arruda et al. (2025): [Diffusion Models In Simulation-Based Inference: A Tutorial Review](https://bayesflow-org.github.io/diffusion-experiments/)
+    [Diffusion Models In Simulation-Based Inference: A Tutorial Review](https://bayesflow-org.github.io/diffusion-experiments/)
     """)
     return
 
