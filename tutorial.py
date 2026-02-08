@@ -114,7 +114,6 @@ def _():
     We will train a neural network to approximate the posterior distribution for the simple **inverse kinematics** problem.
 
     Concretely, we will see how to:
-
     - define a *prior* over parameters and a *simulator* producing synthetic observations,
     - generate a training dataset by forward simulation,
     - train an amortized inference model using **diffusion-based SBI** in [BayesFlow](https://bayesflow.org),
@@ -194,10 +193,10 @@ def _():
     def my_prior():
         return {'parameters': θ}
 
-    def my_simulator(parameters):
+    def my_observation_model(parameters):
         return {'sim_data': x}
 
-    simulator = bf.make_simulator([my_prior, my_simulator])
+    simulator = bf.make_simulator([my_prior, my_observation_model])
 
     # 2. Create workflow
     workflow = bf.BasicWorkflow(
@@ -857,7 +856,7 @@ def _():
     ### Adaptation During Inference Time
 
     The inverse-kinematics posterior is typically multimodal: multiple arm configurations can match the same
-    end-effector position. Here, we steer sampling *during reverse diffusion* by adding the gradient of a
+    end-position. Here, we steer sampling *during reverse diffusion* by adding the gradient of a
     differentiable "preference" term to the learned reverse dynamics.
 
     We use the first angle of the "elbow" as a simple selector:
@@ -941,20 +940,20 @@ def _(mode, obs, strength, workflow_kinematics_diffusion):
     # Visualize effect on arm configurations 
     fig, ax = plt.subplots(1, 2, figsize=(10, 4), subplot_kw=dict(box_aspect=1.0), layout="constrained")
 
-    model_left = InverseKinematicsModel(linecolors=["teal"] * 3)   # unguided
-    model_right = InverseKinematicsModel(linecolors=["teal"] * 3)  # guided
+    model_left = InverseKinematicsModel(linecolors=["#E7298A"] * 3)   # unguided
+    model_right = InverseKinematicsModel(linecolors=["#E7298A"] * 3)  # guided
 
     model_left.update_plot_ax(
         ax[0],
         theta_unguided,
         obs["observables"][0, ::-1],
-        exemplar_color="#e6e7eb",
+        exemplar_color="#E7298A",
     )
     model_right.update_plot_ax(
         ax[1],
         theta_guided,
         obs["observables"][0, ::-1],
-        exemplar_color="#e6e7eb",
+        exemplar_color="#E7298A",
     )
 
     ax[0].set_title("Posterior samples")
