@@ -119,7 +119,7 @@ def _():
     - generate a training dataset by forward simulation,
     - train an amortized inference model using **diffusion-based SBI** in [BayesFlow](https://bayesflow.org),
     - draw approximate posterior samples for a new observation,
-    - compare diffusion models to *Flow Matching* and *Consistency Models*,
+    - compare diffusion models to *flow matching* and *consistency models*,
     - make *post-hoc modifications* to inference via guided sampling.
     """)
     return
@@ -130,7 +130,7 @@ def _():
     mo.md(r"""
     ## 1. Simulation-Based Inference (SBI)
 
-    In Bayesian inference we want the **posterior distribution**
+    In Bayesian inference, we want to infer the **posterior distribution**
     $p(\boldsymbol\theta \mid \mathbf{x})$: a probability distribution over parameters
     $\boldsymbol\theta$ given observed data $\mathbf{x}$.
 
@@ -297,7 +297,7 @@ def _(bf, observation_model):
     simulator = bf.make_simulator([prior, observation_model])
 
     # now we create the simulator and generate training data
-    n_simulations = 10000
+    n_simulations = 10_000
     training_data = simulator.sample(n_simulations)
 
     print(f"Generated {n_simulations} simulations")
@@ -322,13 +322,14 @@ def _():
 
 @app.cell(hide_code=True)
 def _(bf, simulator, training_data, variable_names_nice):
-    def plot_params_kinematic(params, params2=None):
+    def plot_params_kinematic(params=None, params2=None):
         _, _ax = plt.subplots(1, 4, sharex=True, sharey=True, 
                                layout='constrained', figsize=(10, 2))
         for a_i, (a, name) in enumerate(zip(_ax, variable_names_nice)):
             if params2 is not None:
                 a.hist(params2[:, a_i], density=True, color='black', alpha=.5)
-            a.hist(params[:, a_i], density=True, color='#E7298A')
+            if params is not None:
+                a.hist(params[:, a_i], density=True, color='#E7298A')
             a.set_xlabel(name)
         _ax[0].set_ylabel("Density")
         _ax[0].set_ylim(0, 1.6)
@@ -336,7 +337,7 @@ def _(bf, simulator, training_data, variable_names_nice):
         plt.show()
         return
 
-    plot_params_kinematic(training_data['parameters'])
+    plot_params_kinematic(params2=training_data['parameters'])
 
     _adapter_plot = (
         bf.adapters.Adapter()
@@ -435,11 +436,11 @@ def _(plot_params_kinematic, training_data, workflow_kinematics_example):
 
 
 @app.cell(hide_code=True)
-def _(n_epochs_short):
+def _(make_cell_depended, n_epochs_short):
     mo.md(rf"""
     The model above was trained only briefly ({n_epochs_short} epochs) to demonstrate the workflow mechanics.
     Posterior quality is still rough at this stage.
-    So let's train a bit longer: 200 epochs! This will take around 2 minutes.
+    So let's train a bit longer: 200 epochs! This will take around {make_cell_depended} minutes.
     """)
     return
 
@@ -464,6 +465,7 @@ def _(adapter, bf, simulator, training_data):
 
 @app.cell(hide_code=True)
 def _():
+    make_cell_depended = 2
     mo.md(r"""
     ### Amortized Bayesian Inference
 
@@ -472,7 +474,7 @@ def _():
 
     #### Why amortization matters
 
-    Traditional Bayesian methods (e.g. MCMC) solve one inference problem at a time:
+    Traditional Bayesian methods (e.g., MCMC) solve one inference problem at a time:
     - new observation $\mathbf{x}_{\mathrm{obs}}$  → rerun MCMC
     - computational cost grows linearly with the number of datasets.
 
@@ -489,7 +491,7 @@ def _():
     If simulations do not cover the region of interest, the approximation may degrade.
     In practice this is addressed by better priors, more simulations, or robust inference methods.
     """)
-    return
+    return (make_cell_depended,)
 
 
 @app.cell
@@ -528,8 +530,8 @@ def _():
 
 
 @app.cell
-def _(bf, variable_names_nice, workflow_kinematics_diffusion):
-    test_data = workflow_kinematics_diffusion.simulator.sample(100)
+def _(bf, simulator, variable_names_nice, workflow_kinematics_diffusion):
+    test_data = simulator.sample(100)
 
     posterior_samples_test_data = workflow_kinematics_diffusion.sample(
         conditions=test_data,
@@ -602,7 +604,7 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Forward process (noising)
+    ### Forward process (Training)
 
     We start with a clean sample $\boldsymbol\theta_0$ (here: a parameter vector) and gradually add noise:
 
@@ -610,7 +612,7 @@ def _():
 
     where $t \in [0,1]$ is a continuous diffusion time.
     At $t \approx 1$, the distribution becomes close to pure noise.
-    Different choices of the noise schedule determine how fast noise is added over time and have an impact on the performance later ([Arruda et al. (2025)](https://arxiv.org/abs/2512.20685)).
+    Different choices of the *noise schedule* $\alpha_t$ and $\sigma_t$ determine how fast noise is added over time and have an impact on the performance later ([Arruda et al. (2025)](https://arxiv.org/abs/2512.20685)).
     """)
     return
 
@@ -621,7 +623,7 @@ def _():
         start=0.0,
         stop=1.0,
         step=0.05,
-        value=0.9,
+        value=0.0,
         label="Diffusion time t:",
         show_value=True,
         debounce=True
@@ -675,7 +677,7 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Reverse process (denoising / sampling)
+    ### Reverse process (Inference)
 
     The diffusion model learns how to move from noisy samples back to clean samples.
     In practice, sampling is performed by solving a learned reverse-time stochastic differential equation (SDE) or an equivalent deterministic ODE.
@@ -690,7 +692,7 @@ def _():
     mo.md(r"""
     ### Short Summary
 
-    - Diffusion model learns score function: $\nabla_{\boldsymbol\theta} \log p(\boldsymbol\theta\mid\mathbf{x})$, the "direction" it which we need to solve the reverse SDE
+    - Diffusion model learns a score function: $\nabla_{\boldsymbol\theta} \log p(\boldsymbol\theta\mid\mathbf{x})$, the "direction" it which we need to solve the reverse SDE
     - Sample by starting from noise and iteratively denoising
 
     This provides a highly expressive posterior approximation, especially useful for:
@@ -711,7 +713,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.image(src="static/images/fm_cm_visual.pdf", caption="Flow matching and consistency models as alternative parameterizations of diffusion models.")
+    mo.image(src="static/images/fm_cm_visual.png", caption="Flow matching and consistency models as alternative parameterizations of diffusion models.")
     return
 
 
@@ -974,7 +976,7 @@ def _():
        We avoid evaluating $p(\mathbf{x}\mid\boldsymbol\theta)$ and train purely from simulations.
 
     2. **Amortization makes inference cheap at test time**:
-       After training, we can sample approximate posteriors for new observations instantly.
+       After training, we can sample approximate posteriors for new observations instantly. Very useful for diagnostics!
 
     3. **Diffusion models provide strong posterior expressiveness**:
        Iterative denoising can represent complex and multimodal posteriors more reliably than many single-pass density models.
