@@ -4,7 +4,7 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import bayesflow as bf
 import keras
-from bayesflow.networks.diffusion_model import CosineNoiseSchedule
+from bayesflow.networks.inference.diffusion import CosineNoiseSchedule
 
 from case_study1.ema_callback import EMA, save_ema_models
 
@@ -41,7 +41,7 @@ MODELS = {
                                   {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS,
                                    "optimal_transport_kwargs": {"condition_ratio": 0.01, "partial_factor": 0.9}}),
         "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE, "subnet_kwargs": SUBNET_KWARGS}),
-        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"subnet_kwargs": SUBNET_KWARGS}),
+        "stable_consistency_model": (bf.networks.StableConsistencyModel, {"subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",

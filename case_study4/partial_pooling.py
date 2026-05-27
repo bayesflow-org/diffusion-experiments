@@ -1,19 +1,15 @@
 import os
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
-else:
-    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from scipy.stats import median_abs_deviation
 
-import keras
 import bayesflow as bf
+import keras
 
-from bayesflow.diagnostics.metrics import root_mean_squared_error as nrmse
-from bayesflow.diagnostics.metrics import calibration_error as ece
+from bayesflow.diagnostics.metrics import calibration_error as ece, root_mean_squared_error as nrmse
 
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
@@ -42,40 +38,41 @@ adapter = (
     .rename("sim_data", "summary_variables")
 )
 
-workflow_global = bf.BasicWorkflow(
+workflow = bf.BasicWorkflow(
     adapter=adapter,
     summary_network=bf.networks.SetTransformer(summary_dim=16, dropout=0.1),
-    inference_network=bf.networks.CompositionalDiffusionModel(),
+    inference_network=bf.networks.DiffusionModel(),
 )
 
 model_path = BASE / 'models' / 'partial_pooling_global.keras'
 if not os.path.exists(model_path):
     training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS)
 
-    history = workflow_global.fit_offline(
+    history = workflow.fit_offline(
         training_data,
         epochs=EPOCHS,
         batch_size=BATCH_SIZE,
         verbose=2,
     )
-    workflow_global.approximator.save(model_path)
+    workflow.approximator.save(model_path)
 else:
-    workflow_global.approximator = keras.models.load_model(model_path)
+    workflow.approximator = keras.models.load_model(model_path)
 
 #%%
 test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS)
 
 #%%
 logging.info("Starting Partial-Pooling (global) inference...")
+workflow_global = bf.CompositionalWorkflow.from_basic_workflow(workflow)
 global_posterior = workflow_global.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data']},
     compute_prior_score=prior_global_score,
-    compositional_bridge_d1=1/N_SUBJECTS,
     mini_batch_size=3,
     method=METHOD,
     steps=STEPS,
-    max_steps=MAX_STEP
+    max_steps=MAX_STEP,
+    batch_size=BATCH_SIZE,
 )
 ps = global_posterior.copy()
 ps['beta'] = beta_from_normal(ps['beta_raw'])
@@ -92,7 +89,6 @@ plt.show()
 fig = bf.diagnostics.calibration_ecdf(
     estimates=ps,
     targets=test_data,
-    difference=True,
     variable_names=pretty_param_names_global
 )
 plt.show()

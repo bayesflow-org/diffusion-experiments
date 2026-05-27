@@ -1,10 +1,5 @@
 # # PEtab benchmark model with BayesFlow
 import os
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "tensorflow"
-else:
-    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
-
 from typing import Union
 import numpy as np
 import pandas as pd
@@ -22,7 +17,7 @@ from pypesto.visualize.model_fit import visualize_optimized_model_fit
 from scipy.stats import median_abs_deviation
 
 import bayesflow as bf
-from bayesflow.diagnostics.metrics import root_mean_squared_error, posterior_contraction, calibration_error, classifier_two_sample_test
+from bayesflow.diagnostics.metrics import root_mean_squared_error, posterior_contraction, calibration_error, classifier_two_sample_test, accuracy_random_points
 
 import logging
 pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
@@ -31,16 +26,19 @@ logging.getLogger("pypesto").setLevel(logging.ERROR)
 from case_study2.helper_pypesto import load_problem, simulate_parallel, get_samples_from_dict, compute_likelihood_parallel, create_pypesto_problem, sample_from_prior, simulator_amici
 
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
+num_runs = 10
+run_id = job_id % num_runs
 n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
 BASE = Path(__file__).resolve().parent
 num_training_sets = 512 * 64
 num_validation_sets = 1000
 problem_name = "Beer_MolBioSystems2014"
-models_dir = BASE / "models"
-metrics_dir = BASE / 'metrics'
-#metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/metrics')
-#models_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models')
-mcmc_path = BASE / "models" / f'mcmc_samples_{problem_name}.pkl'
+lustre_metrics_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/metrics")
+metrics_dir = lustre_metrics_dir if lustre_metrics_dir.exists() else BASE / "metrics"
+lustre_models_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models")
+models_dir = lustre_models_dir if lustre_models_dir.exists() else BASE / "models"
+mcmc_path = models_dir / f'mcmc_samples_{problem_name}_{run_id}.pkl'
+mcmc_metrics_path = metrics_dir / f'{problem_name}_mcmc_metrics_{run_id}.csv'
 RUN_TEST = False
 
 
@@ -128,6 +126,7 @@ def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts,
 
 #%%
 if __name__ == "__main__":
+    print(f"job_id={job_id}, run_id={run_id}, num_runs={num_runs}")
     pypesto_problem, petab_problem, factory, amici_predictor = load_problem(problem_name)
     param_names = [name for i, name in enumerate(pypesto_problem.x_names) if i in pypesto_problem.x_free_indices]
     lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
@@ -246,8 +245,8 @@ if __name__ == "__main__":
             test_data[key] = values[mcmc_mask]
 
     #%%
-    if os.path.exists(metrics_dir / f'{problem_name}_mcmc_metrics.csv'):
-        with open(metrics_dir / f'{problem_name}_mcmc_metrics.csv', 'rb') as f:
+    if os.path.exists(mcmc_metrics_path):
+        with open(mcmc_metrics_path, 'rb') as f:
             mcmc_df = pd.read_csv(f)
         print("MCMC metrics already computed.")
     else:
@@ -265,8 +264,9 @@ if __name__ == "__main__":
         test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
         print(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
 
+        tarp_out = accuracy_random_points(mcmc_posterior_samples[mcmc_mask], test_targets)
         mcmc_df = pd.DataFrame([{
-            'model': 'MCMC',
+            'model': f'MCMC_{run_id}',
             'sampler': 'MCMC',
             'nrmse': root_mean_squared_error(
                 mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=np.nanmedian
@@ -286,7 +286,9 @@ if __name__ == "__main__":
             'posterior_calibration_error_mad': calibration_error(
                 mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=median_abs_deviation
             )['values'].mean(),
+            'posterior_tarp': tarp_out['values'],
+            'posterior_tarp_p': tarp_out['ks_pvalue'],
             'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug)
         }], index=[0])
-        with open(metrics_dir / f'{problem_name}_mcmc_metrics.csv', 'wb') as f:
+        with open(mcmc_metrics_path, 'wb') as f:
             mcmc_df.to_csv(f)

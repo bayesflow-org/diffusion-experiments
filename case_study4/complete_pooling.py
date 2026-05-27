@@ -1,20 +1,16 @@
 # %%
 import os
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
-else:
-    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from scipy.stats import median_abs_deviation
 
-import keras
 import bayesflow as bf
+import keras
 
-from bayesflow.diagnostics.metrics import root_mean_squared_error as nrmse
-from bayesflow.diagnostics.metrics import calibration_error as ece
+from bayesflow.diagnostics.metrics import calibration_error as ece, root_mean_squared_error as nrmse
 
 from case_study4.settings import EPOCHS, BATCH_SIZE, N_TRAINING_BATCHES, N_TRIALS, N_SUBJECTS, N_TEST, N_SAMPLES, BASE, METHOD, STEPS, MAX_STEP
 from case_study4.ddm_simulator import simulator_flat, beta_from_normal, prior_flat_score
@@ -36,10 +32,10 @@ adapter = (
     .rename("sim_data", "summary_variables")
 )
 
-workflow_trials = bf.BasicWorkflow(
+workflow_trials = bf.CompositionalWorkflow(
     adapter=adapter,
     summary_network=bf.networks.SetTransformer(summary_dim=16, dropout=0.1),
-    inference_network=bf.networks.CompositionalDiffusionModel(),
+    inference_network=bf.networks.DiffusionModel(),
 )
 
 # %%
@@ -65,7 +61,7 @@ print("Starting No-Pooling inference...")
 no_pooling_data = test_data.copy()
 no_pooling_data['sim_data'] = test_data['sim_data'][:, 0]  # only first subject, no pooling
 no_pooling_ps = workflow_trials.sample(conditions=no_pooling_data, num_samples=N_SAMPLES,
-                                       method=METHOD, steps=STEPS, max_steps=MAX_STEP)
+                                       method=METHOD, steps=STEPS, max_steps=MAX_STEP, batch_size=BATCH_SIZE)
 no_pooling_ps['beta'] = beta_from_normal(no_pooling_ps['beta_raw'])
 no_pooling_ps.pop('beta_raw')
 
@@ -107,11 +103,11 @@ test_posterior_comp = workflow_trials.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data']},
     compute_prior_score=prior_flat_score,
-    ompositional_bridge_d1=1/N_SUBJECTS,
     mini_batch_size=3,
     method=METHOD,
     steps=STEPS,
-    max_steps=MAX_STEP
+    max_steps=MAX_STEP,
+    batch_size=BATCH_SIZE,
 )
 test_posterior_comp['beta'] = beta_from_normal(test_posterior_comp['beta_raw'])
 test_posterior_comp.pop('beta_raw')

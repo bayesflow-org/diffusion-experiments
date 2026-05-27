@@ -28,17 +28,21 @@ num_validation_sets = 1000
 COMPUTE_METRICS = False
 logging.info(problem_name)
 
-model_name = list(MODELS.keys())[job_id]
-conf_tuple = MODELS[model_name]
+model_names = list(MODELS.keys())
+num_models = len(model_names)
+model_base_name = model_names[job_id % num_models]
+version_id = job_id // num_models
+model_name = f"{model_base_name}_{version_id}" if job_id >= num_models else model_base_name
+conf_tuple = MODELS[model_base_name]
 logging.info(model_name)
 
 logging.getLogger("pypesto").setLevel(logging.ERROR)
 logging.getLogger("petab").setLevel(logging.ERROR)
 logging.getLogger("bayesflow").setLevel(logging.ERROR)
-models_dir = BASE / "models"
-metrics_dir = BASE / 'metrics'
-#metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/metrics')
-#models_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models')
+lustre_metrics_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/metrics")
+metrics_dir = lustre_metrics_dir if lustre_metrics_dir.exists() else BASE / "metrics"
+lustre_models_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models")
+models_dir = lustre_models_dir if lustre_models_dir.exists() else BASE / "models"
 
 #%%
 if __name__ == "__main__":

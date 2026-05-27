@@ -1,7 +1,4 @@
 # %%
-import os
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,9 +12,6 @@ with open(BASE / 'metrics' / f'no_pooling_metrics_{N_TRIALS}.pkl', 'rb') as f:
 
 with open(BASE / 'metrics' / f'complete_pooling_metrics_{N_TRIALS}.pkl', 'rb') as f:
     complete_pooling_metrics = pickle.load(f)
-
-#with open(BASE / 'metrics' / 'partial_pooling_global_metrics.pkl', 'rb') as f:
-#    partial_pooling_global_metrics = pickle.load(f)
 
 with open(BASE / 'metrics' / 'partial_pooling_local_metrics.pkl', 'rb') as f:
     partial_pooling_local_metrics = pickle.load(f)
@@ -89,5 +83,5 @@ handles = [
 
 fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, -0.1),
            ncols=len(model_metrics), fontsize=fontsize, frameon=False)
-#plt.savefig(BASE / 'plots' / 'pooling_metrics.pdf', bbox_inches='tight')
+plt.savefig(BASE / 'plots' / 'pooling_metrics.pdf', bbox_inches='tight')
 plt.show()
