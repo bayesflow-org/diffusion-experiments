@@ -2,11 +2,13 @@ import keras
 import bayesflow as bf
 from bayesflow.utils.serialization import deserialize, serialize
 from bayesflow.utils import sequential_kwargs
-from bayesflow.networks.residual import Residual
-from bayesflow.experimental.resnet.double_conv import DoubleConv
 
-from down_block import DownSample
-from up_block import UpSample
+from .residual import Residual
+from .double_conv import DoubleConv
+from .sequential import Sequential
+
+from .down_block import DownSample
+from .up_block import UpSample
 
 
 @bf.utils.serialization.serializable("custom")
@@ -49,7 +51,7 @@ class PaddedUNetSubnet(keras.Layer):
             layers.append(keras.layers.Cropping2D(cropping=self.pad))
             if s < len(widths) - 1:
                 self.stages_downsample.append(DownSample(out_channels=widths[s+1]))
-            self.stages_down.append(bf.networks.Sequential(layers))
+            self.stages_down.append(Sequential(layers))
 
         for s, (num_res, width) in enumerate(zip(reversed(num_res_blocks), reversed(widths))):
             layers = []
@@ -69,7 +71,7 @@ class PaddedUNetSubnet(keras.Layer):
                     layers.append(layer)
                     layers.append(act)
                 layers.append(keras.layers.Cropping2D(cropping=self.pad))
-                self.stages_up.append(bf.networks.Sequential(layers))
+                self.stages_up.append(Sequential(layers))
 
         self.last_channels = widths[-1]
 

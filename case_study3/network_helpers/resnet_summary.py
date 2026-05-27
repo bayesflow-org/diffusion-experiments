@@ -1,6 +1,8 @@
 import bayesflow as bf
-from bayesflow.experimental.resnet import ResNet
 import keras
+
+from .resnet import ResNet
+from .sequential import Sequential
 
 
 @bf.utils.serialization.serializable("custom")
@@ -22,7 +24,7 @@ class ResNetSummary(bf.networks.SummaryNetwork):
         layers.append(ResNet(widths, use_batchnorm=use_batchnorm, activation=activation, dropout=dropout))
         layers.append(keras.layers.Conv2D(filters=summary_dim, kernel_size=1))
         layers.append(keras.layers.GlobalAveragePooling2D())
-        self.net = bf.networks.Sequential(layers)
+        self.net = Sequential(layers)
 
     def call(self, inputs, training=False):
         return self.net(inputs, training=training)

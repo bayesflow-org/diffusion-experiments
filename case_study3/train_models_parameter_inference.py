@@ -2,7 +2,8 @@ import os
 import numpy as np
 
 import bayesflow as bf
-from resnet import ResNetSummary
+from bayesflow.diagnostics.metrics import root_mean_squared_error
+from network_helpers import ResNetSummary
 
 from keras.utils import clear_session
 import matplotlib.pyplot as plt
@@ -78,7 +79,7 @@ def evaluate_model_online(workflow, history, data_dict, config, wandb_run):
         targets = {"alpha": test_data["alpha"], "log_std": test_data["log_std"]}
         # Numbers
         wf_samples = workflow.sample(num_samples=1000, conditions={"field": test_data["field"]})
-        nrmse = bf.diagnostics.metrics.root_mean_squared_error(targets=targets, estimates=wf_samples)
+        nrmse = root_mean_squared_error(targets=targets, estimates=wf_samples)
         ce = bf.diagnostics.metrics.calibration_error(targets=targets, estimates=wf_samples)
         clg = bf.diagnostics.metrics.calibration_log_gamma(targets=targets, estimates=wf_samples)
         validation_dict = {
@@ -131,7 +132,7 @@ def evaluate_model_offline(workflow, history, data_dict, config, wandb_run):
         targets = {"alpha": test_data["alpha"], "log_std": test_data["log_std"]}
         # Numbers
         wf_samples = workflow.sample(num_samples=1000, conditions={"field": test_data["field"]})
-        nrmse = bf.diagnostics.metrics.root_mean_squared_error(targets=targets, estimates=wf_samples)
+        nrmse = root_mean_squared_error(targets=targets, estimates=wf_samples)
         ce = bf.diagnostics.metrics.calibration_error(targets=targets, estimates=wf_samples)
         clg = bf.diagnostics.metrics.calibration_log_gamma(targets=targets, estimates=wf_samples)
         validation_dict = {
@@ -203,7 +204,7 @@ if __name__ == "__main__":
         "num_samples_inference": 5000,
         "total_samples": int(5000) // 32 * 500,
     }
-    integrate_kwargs = {"method": "rk45", "steps": 500}
+    integrate_kwargs = {"method": "tsit5", "steps": "adaptive"}
     shapes = [(2 ** n, 2 ** n) for n in range(3, 9)] # From 8x8 to 256x256
     modes = ["online", "offline"]
     dataset_kwargs = {
@@ -310,7 +311,7 @@ if __name__ == "__main__":
             training_kwargs = training_kwargs | {"mode": mode}
             for model_name, conf_tuple in MODELS.items():
                 current_model_kwargs = {"model_name": model_name} | model_kwargs[f"shape_config_{shape[0]}"] | {"model_name_kwargs": conf_tuple[1]}
-                bf.utils.logging.info(f"Training {model_name} on {dataset_kwargs["name"]} with shape {shape} in {mode} mode")
+                bf.utils.logging.info(f"Training {model_name} on {dataset_kwargs['name']} with shape {shape} in {mode} mode")
                 config = {
                     "training": training_kwargs,
                     "model": current_model_kwargs,

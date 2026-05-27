@@ -4,7 +4,7 @@ import bayesflow as bf
 from keras.utils import clear_session
 import matplotlib.pyplot as plt
 
-from padded_unet import PaddedUNetSubnet
+from network_helpers.padded_unet import PaddedUNetSubnet
 
 
 def train_model(config, conf_tuple, data_dict, simulator, wandb_run):
@@ -16,7 +16,6 @@ def train_model(config, conf_tuple, data_dict, simulator, wandb_run):
     )
 
     inference_net_kwargs = conf_tuple[1] | {
-        "concatenate_subnet_input": False,
         "subnet": eval(config["model"]["subnet"]),
         "subnet_kwargs": config["model"][config["model"]["subnet"]]["subnet_kwargs"],
     }
@@ -116,7 +115,7 @@ if __name__ == "__main__":
         "name": "grf_like",
     }
 
-    integrate_kwargs = {"method": "rk45", "steps": 500}
+    integrate_kwargs = {"method": "tsit5", "steps": "adaptive"}
     MODELS = {
         "flow_matching": ("bf.networks.FlowMatching", {
             "integrate_kwargs": integrate_kwargs,
@@ -208,7 +207,7 @@ if __name__ == "__main__":
                 current_model_kwargs = {"model_name": model_name} | model_kwargs[f"shape_config_{shape[0]}"] | {
                     "model_name_kwargs": conf_tuple[1]}
                 bf.utils.logging.info(
-                    f"Training {model_name} on {dataset_kwargs["name"]} with shape {shape} in {training_kwargs["mode"]} mode")
+                    f"Training {model_name} on {dataset_kwargs['name']} with shape {shape} in {training_kwargs['mode']} mode")
                 config = {
                     "training": training_kwargs,
                     "model": current_model_kwargs,

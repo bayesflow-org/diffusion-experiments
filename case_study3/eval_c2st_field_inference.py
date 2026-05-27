@@ -120,7 +120,7 @@ if __name__ == "__main__":
     import os
     from keras.utils import clear_session
 
-    from resnet import ResNetSummary
+    from network_helpers import ResNetSummary
     import padded_unet  # needed for loading approximator from ckpt
 
     modes = ["online", "offline"]
@@ -180,10 +180,10 @@ if __name__ == "__main__":
         for mode in modes:
             df = get_summary_df(mode, shape, config)
             for runidx, run in tqdm(df.iterrows(), desc=f"models left at {mode} shape {shape}"):
-                print(f"{mode} {run["wandb_name"]}: shape {run["shape"]}, model {run["model_type"]}")
-                proj_dir = os.path.join(f"{run["model_type"]}", "NLE", f"{run["shape"]}", run["wandb_name"])
+                print(f"{mode} {run['wandb_name']}: shape {run['shape']}, model {run['model_type']}")
+                proj_dir = os.path.join(f"{run['model_type']}", "NLE", f"{run['shape']}", run["wandb_name"])
                 ckpt_dir = os.path.join(proj_dir, "checkpoints")
-                ckpt_approx_file_path = os.path.join(ckpt_dir, f"{run["wandb_name"]}.keras")
+                ckpt_approx_file_path = os.path.join(ckpt_dir, f"{run['wandb_name']}.keras")
                 figure_dir = os.path.join(proj_dir, "figures")
 
                 print("load approximator")
@@ -198,7 +198,7 @@ if __name__ == "__main__":
                 x_val, y_val = get_classifier_training_data(data_dict, approximator, run, key="validation")
 
                 print("load classifier")
-                classifier_kwargs = model_kwargs[f"shape_config_{run["shape"]}"]
+                classifier_kwargs = model_kwargs[f"shape_config_{run['shape']}"]
                 inputs = keras.Input((run["shape"], run["shape"], 3))
                 outputs = ResNetSummary(**classifier_kwargs)(inputs)
                 classifier = keras.Model(inputs=inputs, outputs=outputs)
