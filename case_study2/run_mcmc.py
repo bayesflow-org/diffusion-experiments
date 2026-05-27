@@ -27,8 +27,6 @@ logging.getLogger("pypesto").setLevel(logging.ERROR)
 from case_study2.helper_pypesto import load_problem, simulate_parallel, get_samples_from_dict, compute_likelihood_parallel, create_pypesto_problem, sample_from_prior, simulator_amici
 
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
-num_runs = 10
-run_id = job_id % num_runs
 n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 2))
 BASE = Path(__file__).resolve().parent
 num_training_sets = 512 * 64
@@ -38,9 +36,10 @@ lustre_metrics_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiment
 metrics_dir = lustre_metrics_dir if lustre_metrics_dir.exists() else BASE / "metrics"
 lustre_models_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models")
 models_dir = lustre_models_dir if lustre_models_dir.exists() else BASE / "models"
-mcmc_path = models_dir / f'mcmc_samples_{problem_name}_{run_id}.pkl'
-mcmc_metrics_path = metrics_dir / f'{problem_name}_mcmc_metrics_{run_id}.csv'
+mcmc_path = models_dir / f'mcmc_samples_{problem_name}.pkl'
+mcmc_metrics_path = metrics_dir / f'{problem_name}_mcmc_metrics.csv'
 mcmc_type = ['parallel_tempering', 'NUTS'][1]
+n_chains = 10
 RUN_TEST = True
 
 
@@ -57,7 +56,7 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
         _pypesto_problem, _petab_problem = create_pypesto_problem(petab_problem, _measurement_df)
 
     if n_optimization_starts == 0:
-        print("Skipping optimization, sample start points for chains from prior")
+        logging.info("Skipping optimization, sample start points for chains from prior")
         _result = None
     else:
         # do the optimization
@@ -77,7 +76,10 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
         )
     elif mcmc_type == 'NUTS':
         _sampler = sample.PymcSampler(
-            progressbar=verbose, tune=10, chains=n_chains, cores=n_chains
+            progressbar=verbose,
+            tune=10 if RUN_TEST else 1000,  # default
+            chains=n_chains,
+            cores=n_chains
         )
     else:
         raise ValueError("Unknown mcmc_type {}".format(mcmc_type))
@@ -88,54 +90,83 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
         sampler=_sampler,
         result=_result,
     )
-    sample.geweke_test(_result)
+    if mcmc_type != 'NUTS':
+        sample.geweke_test(_result)
 
     if data_df is None:
         return _result
     return _result, _petab_problem, _pypesto_problem
 
 
-def get_mcmc_posterior_samples(res):
-    burn_in = sample.geweke_test(res)
-    if burn_in == res.sample_result.trace_x.shape[1]:
-        print("Warning: All samples are considered burn-in.")
-        _samples = res.sample_result.trace_x[0]  # only use first chain
+def get_mcmc_posterior_samples(res, mcmc_type):
+    if mcmc_type == 'parallel_tempering':
+        burn_in = sample.geweke_test(res)
+        if burn_in == res.sample_result.trace_x.shape[1]:
+            logging.warning("All samples are considered burn-in.")
+            _samples = res.sample_result.trace_x[0]  # only use first chain
+        else:
+            _samples = res.sample_result.trace_x[0, burn_in:]  # only use first chain
+        return _samples
+    elif mcmc_type == 'NUTS':
+        # return all chains, pymc discards burn_in automatically
+        return res.sample_result.trace_x
     else:
-        _samples = res.sample_result.trace_x[0, burn_in:]  # only use first chain
-    return _samples
+        raise ValueError("Unknown mcmc_type {}".format(mcmc_type))
 
+
+def _sample_per_chain(ps, n_final_samples):
+    """Sample n_final_samples per chain from a (n_chains, n_samples, n_params) tensor."""
+    n_chains, _, n_params = ps.shape
+    final_ps = np.empty((n_chains, n_final_samples, n_params), dtype=ps.dtype)
+    for i in range(n_chains):
+        idx = np.random.choice(ps[i].shape[0], size=n_final_samples, replace=True)
+        final_ps[i] = ps[i][idx]
+    return final_ps
+
+
+def _flatten_chain_axis(ps):
+    """Convert (n_datasets, n_chains, n_samples, n_params) -> (n_datasets, n_chains*n_samples, n_params)."""
+    return ps.reshape(ps.shape[0], ps.shape[1] * ps.shape[2], ps.shape[3])
 
 #%%
 def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts,
-                    n_mcmc_samples, n_final_samples, n_chains):
+                    n_mcmc_samples, n_final_samples, _n_chains):
     import amici
     import logging
     amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
     pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+    n_params = len(pypesto_prob.x_free_indices)
+    n_return_chains = _n_chains if mcmc_type == 'NUTS' else 1
 
     if all(np.isnan(sim_data_df['simulation'])):
-        return np.full((n_final_samples, len(pypesto_prob.x_free_indices)), np.nan)
+        return np.full((n_return_chains, n_final_samples, n_params), np.nan)
 
     r, _, _ = run_mcmc(
         petab_problem=petab_prob,
         data_df=sim_data_df,
         n_optimization_starts=n_starts,
         n_samples=n_mcmc_samples,
-        n_chains=n_chains,
-        n_procs=1,
+        n_chains=_n_chains,
+        n_procs=_n_chains if mcmc_type == 'NUTS' else 1,
     )
 
     if r is None:
-        return np.full((n_final_samples, len(pypesto_prob.x_free_indices)), np.nan)
+        return np.full((n_return_chains, n_final_samples, n_params), np.nan)
 
-    ps = get_mcmc_posterior_samples(r)
-    # num_samples random samples from posterior
-    idx = np.random.choice(ps.shape[0], size=n_final_samples)
-    return ps[idx]
+    ps = get_mcmc_posterior_samples(r, mcmc_type)
+    if mcmc_type == 'parallel_tempering':
+        # Use single posterior chain and keep an explicit chain axis for downstream consistency.
+        ps = ps[None, ...]  # (1, n_samples, n_params)
+        return _sample_per_chain(ps, n_final_samples)
+    elif mcmc_type == 'NUTS':
+        return _sample_per_chain(ps, n_final_samples)
+    else:
+        raise ValueError("Unknown mcmc_type {}".format(mcmc_type))
+
 
 #%%
 if __name__ == "__main__":
-    logging.info(f"job_id={job_id}, run_id={run_id}, num_runs={num_runs}")
+    logging.info(f"job_id={job_id}, n_chains={n_chains}")
     pypesto_problem, petab_problem, factory, amici_predictor = load_problem(problem_name)
     param_names = [name for i, name in enumerate(pypesto_problem.x_names) if i in pypesto_problem.x_free_indices]
     lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
@@ -162,7 +193,7 @@ if __name__ == "__main__":
             pickle.dump(validation_data, f)
 
     if RUN_TEST:
-        n_optimization_starts = 1
+        n_optimization_starts = 0 if mcmc_type == 'NUTS' else 1
         test_params = sample_from_prior(petab_problem=petab_problem, pypesto_problem=pypesto_problem)
         logging.info(f'test_params {test_params}')
         test = simulator_amici(test_params['amici_params'], amici_predictor, factory, petab_problem, pypesto_problem, return_df=True)
@@ -171,9 +202,9 @@ if __name__ == "__main__":
             petab_problem=petab_problem,
             data_df=test['sim_data_df'],
             n_optimization_starts=n_optimization_starts,
-            n_samples=1e2,
+            n_samples=10,
             n_procs=n_cpus,
-            n_chains=1,
+            n_chains=2,
             verbose=True
         )
 
@@ -181,6 +212,8 @@ if __name__ == "__main__":
             visualize.waterfall(new_result, size=(6, 4))
             plt.show()
             visualize.parameters(new_result, size=(6, 25))
+            plt.show()
+            visualize.sampling_fval_traces(new_result, size=(6, 25))
             plt.show()
             sim_dict = visualize_optimized_model_fit(
                 petab_problem=new_petab_problem,
@@ -208,6 +241,17 @@ if __name__ == "__main__":
                 ax[i].spines['right'].set_visible(False)
             plt.savefig(BASE / "plots" / f'petab_benchmark_model_{problem_name}.png')
             plt.show()
+
+        test = run_mcmc_single(
+            petab_prob=petab_problem,
+            pypesto_prob=pypesto_problem,
+            sim_data_df=test['sim_data_df'],
+            n_starts=0 if mcmc_type == 'NUTS' else 1,
+            n_mcmc_samples=20,
+            n_final_samples=10,
+            _n_chains=2,
+        )
+        print(test.shape)
         exit()
 
     # %%
@@ -216,46 +260,52 @@ if __name__ == "__main__":
             mcmc_posterior_samples = pickle.load(f)
     else:
         logging.info("Running MCMC...")
-        mcmc_posterior_samples = Parallel(n_jobs=n_cpus, verbose=10)(
+        mcmc_posterior_samples = Parallel(n_jobs=n_cpus // n_chains if mcmc_type == 'NUTS' else n_cpus)(
             delayed(run_mcmc_single)(
                 petab_prob=petab_problem,
                 pypesto_prob=pypesto_problem,
                 sim_data_df=sim_data_df,
-                n_starts=10,
+                n_starts=0 if mcmc_type == 'NUTS' else 10,
                 n_mcmc_samples=1e5,
                 n_final_samples=1000,
-                n_chains=4,
+                _n_chains=n_chains,
             ) for sim_data_df in validation_data['sim_data_df']
         )
+        # shape: (n_datasets, n_chains, n_samples, n_parameters) for both samplers
         mcmc_posterior_samples = np.array(mcmc_posterior_samples)
 
         with open(mcmc_path, 'wb') as f:
             pickle.dump(mcmc_posterior_samples, f)
-    mcmc_mask = ~np.isnan(mcmc_posterior_samples.sum(axis=(1, 2)))
+
+    # Keep chain axis and compute valid dataset masks per chain.
+    # Shape: (n_datasets, n_chains, n_samples, n_parameters)
+    mcmc_mask_per_chain = ~np.isnan(mcmc_posterior_samples.sum(axis=(2, 3)))
+    n_available_chains = mcmc_posterior_samples.shape[1]
+    targets_all = pypesto_problem.get_reduced_vector(validation_data['amici_params'].T).T
 
     #%%
-    fig = bf.diagnostics.recovery(
-        estimates=mcmc_posterior_samples[mcmc_mask],
-        targets=pypesto_problem.get_reduced_vector(validation_data['amici_params'].T).T[mcmc_mask],
-        variable_names=param_names,
-    )
-    fig.savefig(BASE / "plots" / f"{problem_name}_mcmc_recovery.png")
+    for chain_idx in range(n_available_chains):
+        chain_mask = mcmc_mask_per_chain[:, chain_idx]
+        if not np.any(chain_mask):
+            logging.warning(f"No valid datasets for chain {chain_idx}, skipping diagnostics plot.")
+            continue
+        chain_samples = mcmc_posterior_samples[chain_mask, chain_idx]
+        chain_targets = targets_all[chain_mask]
+        fig = bf.diagnostics.recovery(
+            estimates=chain_samples,
+            targets=chain_targets,
+            variable_names=param_names,
+        )
+        fig.savefig(BASE / "plots" / f"{problem_name}_mcmc_recovery_chain{chain_idx}.png")
 
-    fig = bf.diagnostics.calibration_ecdf(
-        estimates=mcmc_posterior_samples[mcmc_mask],
-        targets=pypesto_problem.get_reduced_vector(validation_data['amici_params'].T).T[mcmc_mask],
-        variable_names=param_names,
-        difference=True,
-        stacked=True
-    )
-    fig.savefig(BASE / "plots" / f"{problem_name}_mcmc_calibration.png")
-
-    test_data = {}
-    for key, values in validation_data.items():
-        if key == 'sim_data_df':
-            test_data[key] = [v for i, v in enumerate(values) if mcmc_mask[i]]
-        else:
-            test_data[key] = values[mcmc_mask]
+        fig = bf.diagnostics.calibration_ecdf(
+            estimates=chain_samples,
+            targets=chain_targets,
+            variable_names=param_names,
+            stacked=True
+        )
+        fig.savefig(BASE / "plots" / f"{problem_name}_mcmc_calibration_chain{chain_idx}.png")
+        break
 
     #%%
     if os.path.exists(mcmc_metrics_path):
@@ -263,46 +313,67 @@ if __name__ == "__main__":
             mcmc_df = pd.read_csv(f)
         logging.info("MCMC metrics already computed.")
     else:
-        test_targets = get_samples_from_dict(test_data, pypesto_problem)
+        metric_rows = []
+        for chain_idx in range(n_available_chains):
+            chain_mask = mcmc_mask_per_chain[:, chain_idx]
+            if not np.any(chain_mask):
+                logging.warning(f"No valid datasets for chain {chain_idx}, skipping metrics.")
+                continue
+            chain_samples = mcmc_posterior_samples[chain_mask, chain_idx]
 
-        rand_idx = np.random.choice(mcmc_posterior_samples.shape[1])
-        workflow_samples_aug = compute_likelihood_parallel(petab_problem, mcmc_posterior_samples[mcmc_mask, rand_idx],
-                                                           test_data, n_jobs=n_cpus)
+            test_data = {}
+            for key, values in validation_data.items():
+                if key == 'sim_data_df':
+                    test_data[key] = [v for i, v in enumerate(values) if chain_mask[i]]
+                else:
+                    test_data[key] = values[chain_mask]
 
-        # augment test data
-        test_data_aug = compute_likelihood_parallel(petab_problem, test_data['amici_params'], test_data,
-                                                    n_jobs=n_cpus)
+            test_targets = get_samples_from_dict(test_data, pypesto_problem)
+            rand_idx = np.random.choice(chain_samples.shape[1])
+            workflow_samples_aug = compute_likelihood_parallel(
+                petab_problem, chain_samples[:, rand_idx], test_data, n_jobs=n_cpus
+            )
 
-        workflow_samples_aug = workflow_samples_aug[~np.isnan(workflow_samples_aug).any(axis=1)]
-        test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
-        logging.info(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
+            test_data_aug = compute_likelihood_parallel(
+                petab_problem, test_data['amici_params'], test_data, n_jobs=n_cpus
+            )
 
-        tarp_out = accuracy_random_points(mcmc_posterior_samples[mcmc_mask], test_targets)
-        mcmc_df = pd.DataFrame([{
-            'model': f'MCMC_{run_id}',
-            'sampler': 'MCMC',
-            'nrmse': root_mean_squared_error(
-                mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=np.nanmedian
-            )['values'].mean(),
-            'nrmse_mad': root_mean_squared_error(
-                mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=median_abs_deviation
-            )['values'].mean(),
-            'posterior_contraction': posterior_contraction(
-                mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=np.nanmedian
-            )['values'].mean(),
-            'posterior_contraction_mad': posterior_contraction(
-                mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=median_abs_deviation
-            )['values'].mean(),
-            'posterior_calibration_error': calibration_error(
-                mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=np.nanmedian
-            )['values'].mean(),
-            'posterior_calibration_error_mad': calibration_error(
-                mcmc_posterior_samples[mcmc_mask], test_targets, aggregation=median_abs_deviation
-            )['values'].mean(),
-            'posterior_tarp': tarp_out['values'],
-            'posterior_tarp_p': tarp_out['ks_pvalue'],
-            'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug)
-        }], index=[0])
+            workflow_samples_aug = workflow_samples_aug[~np.isnan(workflow_samples_aug).any(axis=1)]
+            test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
+            logging.info(
+                f"chain {chain_idx}: {workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples."
+            )
+
+            tarp_out = accuracy_random_points(chain_samples, test_targets)
+            metric_rows.append({
+                'model': f'MCMC',
+                'sampler': 'MCMC',
+                'chain_idx': chain_idx,
+                'n_datasets': int(chain_samples.shape[0]),
+                'nrmse': root_mean_squared_error(
+                    chain_samples, test_targets, aggregation=np.nanmedian
+                )['values'].mean(),
+                'nrmse_mad': root_mean_squared_error(
+                    chain_samples, test_targets, aggregation=median_abs_deviation
+                )['values'].mean(),
+                'posterior_contraction': posterior_contraction(
+                    chain_samples, test_targets, aggregation=np.nanmedian
+                )['values'].mean(),
+                'posterior_contraction_mad': posterior_contraction(
+                    chain_samples, test_targets, aggregation=median_abs_deviation
+                )['values'].mean(),
+                'posterior_calibration_error': calibration_error(
+                    chain_samples, test_targets, aggregation=np.nanmedian
+                )['values'].mean(),
+                'posterior_calibration_error_mad': calibration_error(
+                    chain_samples, test_targets, aggregation=median_abs_deviation
+                )['values'].mean(),
+                'posterior_tarp': tarp_out['values'],
+                'posterior_tarp_p': tarp_out['ks_pvalue'],
+                'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug),
+            })
+
+        mcmc_df = pd.DataFrame(metric_rows)
         with open(mcmc_metrics_path, 'wb') as f:
             mcmc_df.to_csv(f)
 

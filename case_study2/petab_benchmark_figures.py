@@ -103,19 +103,30 @@ def load_diffusion_metrics(problem_name: str) -> pd.DataFrame:
 
 
 def load_mcmc_metrics(problem_name: str) -> pd.DataFrame:
+    def _extract_mcmc_run_id_from_path(fp: Path) -> int:
+        m = re.search(r"_mcmc_metrics_(\d+)$", fp.stem)
+        return int(m.group(1)) if m else 0
+
     run_files = sorted(METRICS_DIR.glob(f"{problem_name}_mcmc_metrics_*.csv"))
     legacy_file = METRICS_DIR / f"{problem_name}_mcmc_metrics.csv"
     if run_files:
         parts = []
         for fp in run_files:
             with open(fp, "rb") as f:
-                parts.append(pd.read_csv(f, index_col=0))
+                part = pd.read_csv(f, index_col=0)
+            # Ensure run id is available for per-run files even if not present in the CSV content.
+            if "run_id" not in part.columns:
+                part["run_id"] = _extract_mcmc_run_id_from_path(fp)
+            else:
+                run_id_from_file = _extract_mcmc_run_id_from_path(fp)
+                part["run_id"] = pd.to_numeric(part["run_id"], errors="coerce").fillna(run_id_from_file)
+            parts.append(part)
         mcmc_df = pd.concat(parts, ignore_index=True, sort=False)
     elif legacy_file.exists():
         with open(legacy_file, "rb") as f:
             mcmc_df = pd.read_csv(f, index_col=0)
     else:
-        print(f"No MCMC metrics found for {problem_name}")
+        logging.info(f"No MCMC metrics found for {problem_name}")
         return pd.DataFrame()
 
     if mcmc_df.empty:
@@ -144,6 +155,14 @@ def build_combined_run_metrics(diffusion_df: pd.DataFrame, mcmc_df: pd.DataFrame
     """
     if diffusion_df.empty and mcmc_df.empty:
         return pd.DataFrame()
+
+    # For MCMC, each chain is considered a run-equivalent unit.
+    # Encode chain id into run_id so chain rows stay separate downstream.
+    if not mcmc_df.empty and "chain_idx" in mcmc_df.columns:
+        chain_idx = pd.to_numeric(mcmc_df["chain_idx"], errors="coerce").fillna(0).astype(int)
+        base_run_id = pd.to_numeric(mcmc_df["run_id"], errors="coerce").fillna(0).astype(int)
+        mcmc_df = mcmc_df.copy()
+        mcmc_df["run_id"] = base_run_id * 1000 + chain_idx
 
     all_df = pd.concat([diffusion_df, mcmc_df], ignore_index=True, sort=False)
     all_df["model_key"] = all_df["model"].map(normalize_model_key)
