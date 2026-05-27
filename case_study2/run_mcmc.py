@@ -1,5 +1,6 @@
 # # PEtab benchmark model with BayesFlow
 import os
+os.environ["KERAS_BACKEND"] = "tensorflow"  # jax might deadlock joblib here
 from typing import Union
 import numpy as np
 import pandas as pd
@@ -28,7 +29,7 @@ from case_study2.helper_pypesto import load_problem, simulate_parallel, get_samp
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 num_runs = 10
 run_id = job_id % num_runs
-n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
+n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 2))
 BASE = Path(__file__).resolve().parent
 num_training_sets = 512 * 64
 num_validation_sets = 1000
@@ -39,7 +40,8 @@ lustre_models_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments
 models_dir = lustre_models_dir if lustre_models_dir.exists() else BASE / "models"
 mcmc_path = models_dir / f'mcmc_samples_{problem_name}_{run_id}.pkl'
 mcmc_metrics_path = metrics_dir / f'{problem_name}_mcmc_metrics_{run_id}.csv'
-RUN_TEST = False
+mcmc_type = ['parallel_tempering', 'NUTS'][1]
+RUN_TEST = True
 
 
 def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, n_samples=10000, n_procs=10,
@@ -67,11 +69,18 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
             progress_bar=verbose
         )
 
-    _sampler = sample.AdaptiveParallelTemperingSampler(
-        internal_sampler=sample.AdaptiveMetropolisSampler(),
-        n_chains=n_chains,
-        options=dict(show_progress=verbose)
-    )
+    if mcmc_type == 'parallel_tempering':
+        _sampler = sample.AdaptiveParallelTemperingSampler(
+           internal_sampler=sample.AdaptiveMetropolisSampler(),
+           n_chains=n_chains,
+           options=dict(show_progress=verbose)
+        )
+    elif mcmc_type == 'NUTS':
+        _sampler = sample.PymcSampler(
+            progressbar=verbose, tune=10, chains=n_chains, cores=n_chains
+        )
+    else:
+        raise ValueError("Unknown mcmc_type {}".format(mcmc_type))
 
     _result = sample.sample(
         problem=_pypesto_problem,
@@ -126,7 +135,7 @@ def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts,
 
 #%%
 if __name__ == "__main__":
-    print(f"job_id={job_id}, run_id={run_id}, num_runs={num_runs}")
+    logging.info(f"job_id={job_id}, run_id={run_id}, num_runs={num_runs}")
     pypesto_problem, petab_problem, factory, amici_predictor = load_problem(problem_name)
     param_names = [name for i, name in enumerate(pypesto_problem.x_names) if i in pypesto_problem.x_free_indices]
     lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
@@ -140,9 +149,9 @@ if __name__ == "__main__":
                 training_data = pickle.load(f)
         except FileNotFoundError:
             training_data = None
-            print("Training data not found")
+            logging.info("Training data not found")
     else:
-        print('Generate data')
+        logging.info('Generate data')
         training_data = simulate_parallel(num_training_sets, amici_predictor, factory, petab_problem, pypesto_problem)
         validation_data = simulate_parallel(num_validation_sets, amici_predictor, factory, petab_problem,
                                             pypesto_problem, return_df=True)
@@ -155,7 +164,7 @@ if __name__ == "__main__":
     if RUN_TEST:
         n_optimization_starts = 1
         test_params = sample_from_prior(petab_problem=petab_problem, pypesto_problem=pypesto_problem)
-        print('test_params', test_params)
+        logging.info(f'test_params {test_params}')
         test = simulator_amici(test_params['amici_params'], amici_predictor, factory, petab_problem, pypesto_problem, return_df=True)
 
         new_result, new_petab_problem, new_pypesto_problem = run_mcmc(
@@ -164,20 +173,23 @@ if __name__ == "__main__":
             n_optimization_starts=n_optimization_starts,
             n_samples=1e2,
             n_procs=n_cpus,
-            n_chains=2,
+            n_chains=1,
             verbose=True
         )
 
         if n_optimization_starts > 0:
             visualize.waterfall(new_result, size=(6, 4))
+            plt.show()
             visualize.parameters(new_result, size=(6, 25))
+            plt.show()
             sim_dict = visualize_optimized_model_fit(
                 petab_problem=new_petab_problem,
                 result=new_result,
                 pypesto_problem=new_pypesto_problem,
                 return_dict=True
             )
-            print('error:', test_params['amici_params']-new_result.optimize_result.x[0])
+            plt.show()
+            logging.info(f'error: {test_params["amici_params"]-new_result.optimize_result.x[0]}')
 
             fig, ax = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=False, figsize=(10, 3), layout='constrained')
             obs_name = ['Bac', 'Ind']
@@ -198,11 +210,12 @@ if __name__ == "__main__":
             plt.show()
         exit()
 
+    # %%
     if os.path.exists(mcmc_path):
         with open(mcmc_path, 'rb') as f:
             mcmc_posterior_samples = pickle.load(f)
     else:
-        print("Running MCMC...")
+        logging.info("Running MCMC...")
         mcmc_posterior_samples = Parallel(n_jobs=n_cpus, verbose=10)(
             delayed(run_mcmc_single)(
                 petab_prob=petab_problem,
@@ -211,7 +224,7 @@ if __name__ == "__main__":
                 n_starts=10,
                 n_mcmc_samples=1e5,
                 n_final_samples=1000,
-                n_chains=5,
+                n_chains=4,
             ) for sim_data_df in validation_data['sim_data_df']
         )
         mcmc_posterior_samples = np.array(mcmc_posterior_samples)
@@ -248,7 +261,7 @@ if __name__ == "__main__":
     if os.path.exists(mcmc_metrics_path):
         with open(mcmc_metrics_path, 'rb') as f:
             mcmc_df = pd.read_csv(f)
-        print("MCMC metrics already computed.")
+        logging.info("MCMC metrics already computed.")
     else:
         test_targets = get_samples_from_dict(test_data, pypesto_problem)
 
@@ -262,7 +275,7 @@ if __name__ == "__main__":
 
         workflow_samples_aug = workflow_samples_aug[~np.isnan(workflow_samples_aug).any(axis=1)]
         test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
-        print(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
+        logging.info(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
 
         tarp_out = accuracy_random_points(mcmc_posterior_samples[mcmc_mask], test_targets)
         mcmc_df = pd.DataFrame([{
@@ -292,3 +305,5 @@ if __name__ == "__main__":
         }], index=[0])
         with open(mcmc_metrics_path, 'wb') as f:
             mcmc_df.to_csv(f)
+
+logging.info("Done!")

@@ -3,10 +3,6 @@
 
 import os
 import sys
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "tensorflow"
-else:
-    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
 
 import numpy as np
 import pickle
