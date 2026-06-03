@@ -40,7 +40,7 @@ mcmc_path = models_dir / f'mcmc_samples_{problem_name}.pkl'
 mcmc_metrics_path = metrics_dir / f'{problem_name}_mcmc_metrics.csv'
 mcmc_type = ['parallel_tempering', 'NUTS'][1]
 n_chains = 10
-RUN_TEST = True
+RUN_TEST = False
 
 
 def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, n_samples=10000, n_procs=10,
@@ -79,7 +79,7 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
             progressbar=verbose,
             tune=10 if RUN_TEST else 1000,  # default
             chains=n_chains,
-            cores=n_chains
+            cores=1, #min(n_procs, n_chains)
         )
     else:
         raise ValueError("Unknown mcmc_type {}".format(mcmc_type))
@@ -147,7 +147,7 @@ def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts,
         n_optimization_starts=n_starts,
         n_samples=n_mcmc_samples,
         n_chains=_n_chains,
-        n_procs=_n_chains if mcmc_type == 'NUTS' else 1,
+        n_procs=1,
     )
 
     if r is None:
@@ -260,7 +260,7 @@ if __name__ == "__main__":
             mcmc_posterior_samples = pickle.load(f)
     else:
         logging.info("Running MCMC...")
-        mcmc_posterior_samples = Parallel(n_jobs=n_cpus // n_chains if mcmc_type == 'NUTS' else n_cpus)(
+        mcmc_posterior_samples = Parallel(n_jobs=n_cpus)(
             delayed(run_mcmc_single)(
                 petab_prob=petab_problem,
                 pypesto_prob=pypesto_problem,
