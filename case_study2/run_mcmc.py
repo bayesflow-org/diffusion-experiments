@@ -39,6 +39,7 @@ models_dir = lustre_models_dir if lustre_models_dir.exists() else BASE / "models
 mcmc_path = models_dir / f'mcmc_samples_{problem_name}.pkl'
 mcmc_metrics_path = metrics_dir / f'{problem_name}_mcmc_metrics.csv'
 mcmc_type = ['parallel_tempering', 'NUTS'][1]
+mcmc_chain_path = models_dir / f'mcmc_samples_{problem_name}_chain{job_id}.pkl'
 n_chains = 10
 RUN_TEST = False
 
@@ -255,12 +256,9 @@ if __name__ == "__main__":
         exit()
 
     # %%
-    if os.path.exists(mcmc_path):
-        with open(mcmc_path, 'rb') as f:
-            mcmc_posterior_samples = pickle.load(f)
-    else:
-        logging.info("Running MCMC...")
-        mcmc_posterior_samples = Parallel(n_jobs=n_cpus)(
+    if not os.path.exists(mcmc_chain_path):
+        logging.info(f"Running MCMC chain {job_id} over {len(validation_data['sim_data_df'])} datasets...")
+        chain_samples = Parallel(n_jobs=n_cpus)(
             delayed(run_mcmc_single)(
                 petab_prob=petab_problem,
                 pypesto_prob=pypesto_problem,
@@ -268,14 +266,38 @@ if __name__ == "__main__":
                 n_starts=0 if mcmc_type == 'NUTS' else 10,
                 n_mcmc_samples=1e5,
                 n_final_samples=1000,
-                _n_chains=n_chains,
+                _n_chains=1,
             ) for sim_data_df in validation_data['sim_data_df']
         )
-        # shape: (n_datasets, n_chains, n_samples, n_parameters) for both samplers
-        mcmc_posterior_samples = np.array(mcmc_posterior_samples)
+        # shape: (n_datasets, 1, n_samples, n_parameters)
+        chain_samples = np.array(chain_samples)
+        with open(mcmc_chain_path, 'wb') as f:
+            pickle.dump(chain_samples, f)
+        logging.info(f"Saved chain {job_id} to {mcmc_chain_path}")
+    else:
+        logging.info(f"Chain {job_id} already exists, skipping.")
 
+    # Merge all chains once every job has finished.
+    all_chain_paths = [models_dir / f'mcmc_samples_{problem_name}_chain{i}.pkl' for i in range(n_chains)]
+    if not all(os.path.exists(p) for p in all_chain_paths):
+        logging.info("Not all chains available yet — skipping merge and metrics.")
+        logging.info("Done!")
+        exit(0)
+
+    if os.path.exists(mcmc_path):
+        with open(mcmc_path, 'rb') as f:
+            mcmc_posterior_samples = pickle.load(f)
+    else:
+        logging.info("All chains available — merging...")
+        chains = []
+        for p in all_chain_paths:
+            with open(p, 'rb') as f:
+                chains.append(pickle.load(f))
+        # concatenate along chain axis: (n_datasets, n_array_jobs, n_samples, n_parameters)
+        mcmc_posterior_samples = np.concatenate(chains, axis=1)
         with open(mcmc_path, 'wb') as f:
             pickle.dump(mcmc_posterior_samples, f)
+        logging.info(f"Merged samples saved to {mcmc_path}")
 
     # Keep chain axis and compute valid dataset masks per chain.
     # Shape: (n_datasets, n_chains, n_samples, n_parameters)
