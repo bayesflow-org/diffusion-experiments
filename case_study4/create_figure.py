@@ -1,5 +1,3 @@
-# %%
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -15,7 +13,6 @@ with open(BASE / 'metrics' / f'complete_pooling_metrics_{N_TRIALS}.pkl', 'rb') a
 
 with open(BASE / 'metrics' / 'partial_pooling_local_metrics.pkl', 'rb') as f:
     partial_pooling_local_metrics = pickle.load(f)
-print(partial_pooling_local_metrics)
 
 pretty_param_names = [r'$\nu^{(r)}$', r'$\alpha^{(r)}$', r'$t_{0}^{(r)}$', r'$\beta^{(r)}$']
 n_params = len(pretty_param_names)
@@ -36,7 +33,6 @@ fontsize = 11
 metrics_names = list(complete_pooling_metrics.keys())
 metrics_names_pretty = [r'NRMSE', "", r'Calibration Error']
 
-# %%
 fig, axes = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(5, 3), layout='constrained')
 
 metrics_rows = [0, 2]  # which metrics to plot, one per row
@@ -57,18 +53,26 @@ for r, mi in enumerate(metrics_rows):
     for k in range(len(model_metrics)):
         vals = [model_metrics[k][metric][j] for j in range(n_params)]
         yerrs = [model_metrics[k][metric + '-mad'][j] for j in range(n_params)]
-        ax.errorbar(
+        # clip lower error bars so they don't extend below 0
+        lower_errs = [min(yerrs[j], vals[j]) for j in range(n_params)]
+        container = ax.errorbar(
             group_x + offsets[k],
             vals,
-            yerr=yerrs,
+            yerr=[lower_errs, yerrs],
             fmt=markers[k],
             linestyle='',
             alpha=0.8,
             color=colors[k],
             label=pooling_models[k] if r == 0 else None,
+            clip_on=False,
         )
+        # keep error bars semi-transparent but draw the marker fully opaque
+        container.lines[0].set_alpha(1.0)
+        # draw markers on top of the axis spines
+        container.lines[0].set_zorder(10)
 
     ax.set_xlim(-0.5, n_params - 0.5)
+    ax.set_ylim(bottom=0)
     ax.set_xticks(group_x, pretty_param_names, fontsize=fontsize)
     ax.set_ylabel(metrics_names_pretty[mi], fontsize=fontsize)
     ax.grid(True)
