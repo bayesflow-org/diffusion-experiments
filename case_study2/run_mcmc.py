@@ -35,10 +35,10 @@ logging.info(f"OMP_NUM_THREADS={os.environ.get('OMP_NUM_THREADS')}")  # 4
 
 problem_name = "Beer_MolBioSystems2014"
 mcmc_type = 'NUTS'
-n_mcmc_samples = 100  # 1_000
-n_final_samples = 100  # 1_000
+n_mcmc_samples = 1_000
+n_final_samples = 1_000
 n_chains = n_cpus // 4  # 4 cpus per AMICI simulation
-n_tune = 100 #1_000  # default
+n_tune = 1_000  # default
 n_starts = 20
 
 lustre_models_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study2/models")
@@ -174,9 +174,9 @@ if __name__ == "__main__":
         logging.error(f"dataset_idx={dataset_idx} out of range (n_datasets={n_datasets})")
         sys.exit(1)
 
-    #if result_path.exists():
-    #    logging.info(f"Result for dataset {dataset_idx} already exists, skipping.")
-    #    sys.exit(0)
+    if result_path.exists():
+        logging.info(f"Result for dataset {dataset_idx} already exists, skipping.")
+        sys.exit(0)
 
     logging.info(f"Running MCMC for dataset {dataset_idx}/{n_datasets} ({problem_name})")
 
