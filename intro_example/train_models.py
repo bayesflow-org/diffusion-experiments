@@ -18,7 +18,7 @@ MODELS = {
         "flow_matching": (bf.networks.FlowMatching, {}),
         "cot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
         "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
-        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {}),
+        "stable_consistency_model": (bf.networks.StableConsistencyModel, {}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F", 

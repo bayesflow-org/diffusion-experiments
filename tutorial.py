@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.6"
+__generated_with = "0.23.9"
 app = marimo.App(
     app_title="Tutorial: Simulation-Based Inference using Diffusion Models",
     css_file="",
@@ -228,6 +228,7 @@ def _():
 @app.cell
 def _():
     import bayesflow as bf
+
     return (bf,)
 
 
@@ -384,6 +385,7 @@ def _(bf, simulator, training_data, variable_names_nice):
         )
         _ax.set_title('Arm Configurations')
         plt.show()
+
     return plot_arm_posterior, plot_params_kinematic
 
 
@@ -930,7 +932,7 @@ def _(mode, obs, strength, workflow_kinematics_diffusion):
     theta_guided = workflow_kinematics_diffusion.sample(
          conditions=obs,
          num_samples=300,
-         guidance_constraints=dict(
+         guidance_kwargs=dict(
              constraints=constraints, 
              guidance_strength=float(strength.value),
          )

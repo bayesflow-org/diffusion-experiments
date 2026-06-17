@@ -11,7 +11,8 @@ import pypesto.petab
 from bayesflow.diagnostics.metrics import (root_mean_squared_error,
                                            posterior_contraction,
                                            calibration_error,
-                                           classifier_two_sample_test)
+                                           classifier_two_sample_test,
+                                           accuracy_random_points)
 from joblib import Parallel, delayed
 from scipy import stats
 from scipy.stats import median_abs_deviation
@@ -441,6 +442,7 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, petab_pro
             workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples_inference,
                                                       sampler_settings=sampler_settings[solver_name])
 
+        tarp_out = accuracy_random_points(workflow_samples_dict, test_data)
         metrics.append({
             'model': model_name,
             'sampler': solver_name,
@@ -450,6 +452,8 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, petab_pro
             'posterior_contraction_mad': posterior_contraction(workflow_samples_dict, test_data, aggregation=mad)['values'].mean(),
             'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
             'posterior_calibration_error_mad': calibration_error(workflow_samples_dict, test_data, aggregation=mad)['values'].mean(),
+            'posterior_tarp': tarp_out['values'],
+            'posterior_tarp_p': tarp_out['ks_pvalue'],
             'count_nan_data': np.sum(np.isnan(get_samples_from_dict(workflow_samples_dict, pypesto_problem)).any(axis=(1, 2)))
         })
 

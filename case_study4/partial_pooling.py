@@ -1,24 +1,20 @@
 import os
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
-else:
-    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from scipy.stats import median_abs_deviation
 
-import keras
 import bayesflow as bf
+import keras
 
-from bayesflow.diagnostics.metrics import root_mean_squared_error as nrmse
-from bayesflow.diagnostics.metrics import calibration_error as ece
+from bayesflow.diagnostics.metrics import calibration_error as ece, root_mean_squared_error as nrmse
 
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
-from case_study4.settings import EPOCHS, BATCH_SIZE, N_TRAINING_BATCHES, N_TRIALS, N_SUBJECTS, N_TEST, N_SAMPLES, BASE, METHOD, STEPS, MAX_STEP, sample_in_batches
+from case_study4.settings import EPOCHS, BATCH_SIZE, N_TRAINING_BATCHES, N_TRIALS, N_SUBJECTS, N_TEST, N_SAMPLES, BASE, METHOD, STEPS, MAX_STEP
 from case_study4.ddm_simulator import simulator_hierarchical, prior_global_score, beta_from_normal
 
 
@@ -42,40 +38,42 @@ adapter = (
     .rename("sim_data", "summary_variables")
 )
 
-workflow_global = bf.BasicWorkflow(
+workflow = bf.BasicWorkflow(
     adapter=adapter,
     summary_network=bf.networks.SetTransformer(summary_dim=16, dropout=0.1),
-    inference_network=bf.networks.CompositionalDiffusionModel(),
+    inference_network=bf.networks.DiffusionModel(),
 )
 
 model_path = BASE / 'models' / 'partial_pooling_global.keras'
 if not os.path.exists(model_path):
     training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS)
 
-    history = workflow_global.fit_offline(
+    history = workflow.fit_offline(
         training_data,
         epochs=EPOCHS,
         batch_size=BATCH_SIZE,
         verbose=2,
     )
-    workflow_global.approximator.save(model_path)
+    workflow.approximator.save(model_path)
 else:
-    workflow_global.approximator = keras.models.load_model(model_path)
+    workflow.approximator = keras.models.load_model(model_path)
 
 #%%
 test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS)
 
 #%%
 logging.info("Starting Partial-Pooling (global) inference...")
+workflow_global = bf.CompositionalWorkflow.from_basic_workflow(workflow)
 global_posterior = workflow_global.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data']},
     compute_prior_score=prior_global_score,
-    compositional_bridge_d1=1/N_SUBJECTS,
     mini_batch_size=3,
     method=METHOD,
     steps=STEPS,
-    max_steps=MAX_STEP
+    max_steps=MAX_STEP,
+    batch_size=BATCH_SIZE,
+    compositional_bridge_d0=0.1
 )
 ps = global_posterior.copy()
 ps['beta'] = beta_from_normal(ps['beta_raw'])
@@ -92,9 +90,9 @@ plt.show()
 fig = bf.diagnostics.calibration_ecdf(
     estimates=ps,
     targets=test_data,
-    difference=True,
     variable_names=pretty_param_names_global
 )
+fig.savefig(BASE / "plots" / "partial_pooling_global_calibration.png")
 plt.show()
 
 metrics = {
@@ -121,7 +119,7 @@ adapter_subjects = (
 workflow_local = bf.BasicWorkflow(
     adapter=adapter_subjects,
     summary_network=bf.networks.SetTransformer(summary_dim=16, dropout=0.1),
-    inference_network=bf.networks.DiffusionModel(),
+    inference_network=bf.networks.StableConsistencyModel(),
 )
 
 model_path = BASE / 'models' / 'partial_pooling_local.keras'
@@ -140,71 +138,24 @@ else:
 
 #%%
 logging.info("Starting Partial-Pooling (local) inference...")
-test_data_local = np.repeat(
-    test_data['sim_data'][:, :, None, ...],  # (N_TEST, N_SUBJECTS, 1, N_TRIALS, 2)
-    N_SAMPLES,
-    axis=1
-)
-# merge subject + sample into batch
-test_data_local = test_data_local.reshape(-1, N_TRIALS, 2)  # (N_TEST * N_SUBJECTS * N_SAMPLES, N_TRIALS, 2)
 
-def expand_subject_param(arr):
-    """
-    arr: shape (N_TEST, ...) or (N_TEST,) or (N_TEST, 1, ...)
-    Returns: shape (N_TEST * N_SUBJECTS, ...)
-    where for each subject the same value is repeated across samples.
-    """
-    arr = np.asarray(arr)
-
-    if arr.ndim == 1:
-        # (N_TEST,) -> (N_TEST, 1)
-        arr = arr[:, None]
-
-    # (N_TEST, ...) -> (N_TEST, 1, ...)
-    arr = arr[:, None, ...]
-    # repeat along sample axis
-    arr = np.repeat(arr, N_SUBJECTS, axis=1)  # (N_TEST, N_SUBJECTS, N_SAMPLES, ...)
-
-    # merge (subject, sample) -> batch
-    return arr.reshape(N_TEST * N_SUBJECTS * N_SAMPLES, *arr.shape[3:])
-
-conditions = {
-    "sim_data": test_data_local,
-    "mu_nu": expand_subject_param(global_posterior["mu_nu"]),
-    "mu_log_alpha": expand_subject_param(global_posterior["mu_log_alpha"]),
-    "mu_log_t0": expand_subject_param(global_posterior["mu_log_t0"]),
-    "log_sigma_nu": expand_subject_param(global_posterior["log_sigma_nu"]),
-    "log_sigma_log_alpha": expand_subject_param(global_posterior["log_sigma_log_alpha"]),
-    "log_sigma_log_t0": expand_subject_param(global_posterior["log_sigma_log_t0"]),
-    "beta_raw": expand_subject_param(global_posterior["beta_raw"]),
-}
-
-samples_flat = sample_in_batches(
-    workflow=workflow_local,
-    data=conditions,
-    num_samples=1,
+samples_local = workflow_local.ancestral_sample(
+    conditions={"sim_data": test_data['sim_data']},
+    ancestral_conditions=global_posterior,
     batch_size=BATCH_SIZE*10,
-    sampler_settings=dict(method="tsit5", steps=STEPS, max_steps=MAX_STEP)
 )
 
-samples = {}
-for k in samples_flat.keys():
-    arr = samples_flat[k][:, 0]  # only one sample per condition
-    # arr shape: (N_TEST * N_SUBJECTS * N_SAMPLES, ...)
-    arr = arr.reshape(N_TEST*N_SUBJECTS, N_SAMPLES, *arr.shape[1:])
-    samples[k] = arr
-samples['beta'] = expand_subject_param(ps['beta']).reshape(N_TEST*N_SUBJECTS, N_SAMPLES, 1)
-
+#%%
+samples = samples_local.copy()
 test_params_local = {}
 for p in param_names_local:
     test_params_local[p] = test_data[p].reshape(-1, 1)
 
-test_params_local['log_alpha'] = np.log(test_params_local['alpha'])
-test_params_local['log_t0'] = np.log(test_params_local['t0'])
 test_params_local['beta'] = np.repeat(test_data['beta'], N_SUBJECTS, axis=-1).reshape(-1, 1)
-samples['log_alpha'] = np.log(samples['alpha'])
-samples['log_t0'] = np.log(samples['t0'])
+samples['beta'] = np.repeat(ps['beta'][:, None], N_SUBJECTS, axis=1)
 
+for k, v in samples.items():
+    samples[k] = v.reshape(-1, N_SAMPLES, 1)
 
 fig = bf.diagnostics.recovery(
     estimates=samples,
@@ -221,6 +172,7 @@ fig = bf.diagnostics.calibration_ecdf(
     variable_names=pretty_param_names_local,
     variable_keys=param_metrics
 )
+fig.savefig(BASE / "plots" / "partial_pooling_local_calibration.png")
 plt.show()
 
 metrics = {

@@ -37,10 +37,10 @@ benchmarks = list(
 
 model_name, task_name, sampler_family = benchmarks[job_id]
 BASE = Path(__file__).resolve().parent
-metrics_dir = BASE / 'metrics'
-models_dir = BASE / 'models'
-#metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics')
-#models_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/models')
+lustre_metrics_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics")
+metrics_dir = lustre_metrics_dir if lustre_metrics_dir.exists() else BASE / "metrics"
+lustre_models_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/models")
+models_dir = lustre_models_dir if lustre_models_dir.exists() else BASE / "models"
 
 logging.info(f"Running job {job_id} with model {model_name}, task {task_name}, sampler {sampler_family}.")
 task = sbibm.get_task(task_name)

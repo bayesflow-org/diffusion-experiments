@@ -3,12 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-METRICS = ['NRMSE', 'Posterior Contraction', 'Calibration Error', 'c2st']
+METRICS = ['NRMSE', 'Posterior Contraction', 'Calibration Error', 'c2st', 'TARP']
 METRIC_LABELS = {
     'NRMSE': r'$1-$NRMSE',
     'Posterior Contraction': r'Contraction',
     'Calibration Error': 'Calibration',
     'c2st': r'$1-\vert 0.5-\text{C2ST}\vert$',
+    'TARP': r'$1-\vert\text{TARP}\vert$',
 }
 
 
@@ -80,8 +81,9 @@ def _prep_metrics(df):
     d = df.copy()
     if 'posterior_contraction' in d: d['Posterior Contraction'] = d['posterior_contraction']
     if 'c2st' in d: d['c2st'] = 1 - np.abs(0.5 - d['c2st'])
-    if 'nrmse' in d: d['NRMSE'] = 1 - d['nrmse']
+    if 'nrmse' in d: d['NRMSE'] = 1 - np.minimum(d['nrmse'], 1)  # noise prediction explodes sometimes
     if 'posterior_calibration_error' in d: d['Calibration Error'] = 1 - 2*d['posterior_calibration_error']
+    if 'posterior_tarp' in d: d['TARP'] = 1 - np.abs(d['posterior_tarp'])
     return d
 
 def _angles(n):
@@ -98,8 +100,7 @@ def _group_by_method(df, key):
     if key == 'consistency': return {'Consistency Methods': df[df['model'].isin(cons)]}
     if key == 'diffusion': return {'Diffusion Methods': df[df['model'].isin(diff)]}
     if key == 'flow_consistency': return {'Overview': df[df['model'].isin(flow+cons)]}
-    #if key == 'overview': return {'Overview': df[df['model'].isin(['flow_matching','diffusion_edm_vp','diffusion_cosine_F','MCMC'])]}
-    if key == 'overview': return {'Overview': df[df['model'].isin(['MCMC','ot_flow_matching','diffusion_cosine_v','consistency_model'])]}
+    if key == 'overview': return {'Overview': df[df['model'].isin(['MCMC','flow_matching_edm','diffusion_cosine_v','consistency_model'])]}
     if key == 'edm': return {'EDM': df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve'])]}
     if key == 'cosine': return {'Cosine': df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]}
     return {}
@@ -191,16 +192,27 @@ def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None, plot_
     ax.set_rticks([0.2, 0.4, 0.6, 0.8, 1.0])
     ax.tick_params(axis='y', labelsize=10, pad=-12)
     ax.grid(True)
+    # Keep labels centered and readable.
     for i, m in enumerate(metrics):
-        y = 1.2 if m in {'NRMSE', 'Calibration Error'} else 1.15
-        if m == 'NRMSE':
-            x = ang[i] - 0.2
-        elif m == 'Calibration Error':
-            x = ang[i] + 0.2
-        else:
-            x = ang[i]
-        rotation = 90 if m in {'NRMSE', 'Calibration Error'} else 0
-        ax.text(x, y, f"{METRIC_LABELS.get(m, m)}", ha='center', size=12, color='black', rotation=rotation)
+        theta = ang[i]
+        deg = np.degrees(theta) % 360
+
+        # Keep text upright: flip orientation on left half of the plot.
+        rotation = deg - 90
+        if 180 < deg < 360:
+            rotation += 180
+
+        ax.text(
+            theta,
+            1.17,
+            METRIC_LABELS.get(m, m),
+            ha="center",
+            va="center",
+            size=12,
+            color="black",
+            rotation=rotation,
+            rotation_mode="anchor",
+        )
 
 
 def plot_model_comparison_radar(

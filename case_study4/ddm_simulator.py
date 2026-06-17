@@ -1,9 +1,3 @@
-import os
-if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "tensorflow"
-else:
-    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
-
 import numpy as np
 from scipy.stats import beta as beta_dist, norm as norm_dist
 from numba import njit

@@ -20,7 +20,7 @@ MODELS = {
         "flow_matching_edm": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6, "subnet_kwargs": SUBNET_KWARGS}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS}),
         "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE, "subnet_kwargs": SUBNET_KWARGS}),
-        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"subnet_kwargs": SUBNET_KWARGS}),
+        "stable_consistency_model": (bf.networks.StableConsistencyModel, {"subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
