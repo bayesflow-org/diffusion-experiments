@@ -20,6 +20,7 @@ dependencies = [
     "playwright>=1.57.0",
     "plotly>=6.5.2",
     "pyabc>=0.12.16",
+    "pymc>=5.28.5",
     "pypesto==0.5.9",
     "sbibm",
     "tensorflow==2.20.0",
@@ -31,4 +32,4 @@ dependencies = [
 [tool.uv.sources]
 benchmark-models-petab = { git = "https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git", subdirectory = "src/python", rev = "master" }
 sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
-bayesflow = { git = "https://github.com/bayesflow-org/bayesflow.git", rev = "tarp" }
+bayesflow = { git = "https://github.com/bayesflow-org/bayesflow.git", rev = "dev" }

@@ -113,7 +113,7 @@ def load_mcmc_metrics(problem_name: str) -> pd.DataFrame:
         parts = []
         for fp in run_files:
             with open(fp, "rb") as f:
-                part = pd.read_csv(f, index_col=0)
+                part = pd.read_csv(f)
             # Ensure run id is available for per-run files even if not present in the CSV content.
             if "run_id" not in part.columns:
                 part["run_id"] = _extract_mcmc_run_id_from_path(fp)
@@ -124,7 +124,7 @@ def load_mcmc_metrics(problem_name: str) -> pd.DataFrame:
         mcmc_df = pd.concat(parts, ignore_index=True, sort=False)
     elif legacy_file.exists():
         with open(legacy_file, "rb") as f:
-            mcmc_df = pd.read_csv(f, index_col=0)
+            mcmc_df = pd.read_csv(f)
     else:
         logging.info(f"No MCMC metrics found for {problem_name}")
         return pd.DataFrame()
