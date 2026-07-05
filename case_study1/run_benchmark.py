@@ -33,7 +33,7 @@ benchmarks = list(
     (m, t, s) for s, m, t in itertools.product(
     ['ode', 'sde', 'langevin'], MODELS.keys(), sbibm.get_available_tasks()
 ) if is_compatible(m, s)
-) # 320 jobs, first 180 are ODE
+)
 
 model_name, task_name, sampler_family = benchmarks[job_id]
 BASE = Path(__file__).resolve().parent

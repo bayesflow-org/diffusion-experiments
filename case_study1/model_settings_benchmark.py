@@ -1,6 +1,5 @@
 #%%
 import os
-os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import bayesflow as bf
 import keras
@@ -52,6 +51,12 @@ MODELS = {
                     "prediction_type": "F",
                     "schedule_kwargs": {"variance_type": "preserving"},
             "subnet_kwargs": SUBNET_KWARGS}),
+        "diffusion_edm_vp_transformer": (bf.networks.DiffusionModel, {
+                            "noise_schedule": "edm",
+                            "prediction_type": "F",
+                            "schedule_kwargs": {"variance_type": "preserving"},
+                    "subnet": "time_transformer",
+                    "subnet_kwargs": dict(widths=(128, 128, 128, 128, 128))}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",

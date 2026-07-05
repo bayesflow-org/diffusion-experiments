@@ -1,14 +1,11 @@
 import marimo
 
-__generated_with = "0.19.6"
+__generated_with = "0.23.13"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
-    import os
-    os.environ["KERAS_BACKEND"] = "tensorflow"
-
     import pandas as pd
     import numpy as np
     import matplotlib.pyplot as plt
@@ -23,6 +20,7 @@ def _():
 
     from case_study1.model_settings_benchmark import SAMPLER_SETTINGS
     from case_study1.helper_visualize import plot_benchmark_results, plot_by_sampler, plot_by_model, plot_low_budget_c2st_by_problem, pareto_best_sampler, plot_benchmark_results_plotly
+
     return (
         BASE,
         SAMPLER_SETTINGS,
@@ -127,7 +125,6 @@ def _(BASE, pd, plot_benchmark_results_plotly):
 
     plot_benchmark_results_plotly(
         plotly_df,
-        'best'
     )
     return
 
@@ -205,6 +202,7 @@ def _():
     import bayesflow as bf
 
     from model_settings_benchmark import load_model, MODELS
+
     return MODELS, bf, load_model
 
 
@@ -292,12 +290,6 @@ def _(bf, param_names, plt, priors, reference_samples, true_params):
         variable_names=param_names
     )
     plt.show()
-    return
-
-
-@app.cell
-def _():
-    import marimo as mo
     return
 
 

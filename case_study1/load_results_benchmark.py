@@ -26,8 +26,8 @@ benchmarks = list(
 ) if is_compatible(m, s)
 )
 BASE = Path(__file__).resolve().parent
-metrics_dir = BASE / 'metrics'
-#metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics')
+lustre_metrics_dir = Path("/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics")
+metrics_dir = lustre_metrics_dir if lustre_metrics_dir.exists() else BASE / "metrics"
 
 model_names = list(MODELS.keys())
 sampler_names = list(SAMPLER_SETTINGS.keys())
@@ -82,7 +82,7 @@ for key in keys:
         rows.append({
             'model': model,
             'sampler': sampler,
-            'subnet': 'time_mlp',
+            'subnet': 'time_mlp' if 'transformer' not  in model else 'time_transformer',
             'task': task_name,
             'c2st': results_mean[key][task_idx],
             'c2st_std': results_std[key][task_idx],

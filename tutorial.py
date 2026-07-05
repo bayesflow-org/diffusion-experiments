@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.9"
+__generated_with = "0.23.13"
 app = marimo.App(
     app_title="Tutorial: Simulation-Based Inference using Diffusion Models",
     css_file="",
@@ -542,7 +542,11 @@ def _(bf, simulator, variable_names_nice, workflow_kinematics_diffusion):
     bf.diagnostics.plots.coverage(
         estimates=posterior_samples_test_data,
         targets=test_data,
-        variable_names=variable_names_nice
+        variable_names=variable_names_nice,
+        figsize=(8,3),
+        label_fontsize=10,
+        title_fontsize=12,
+        legend_fontsize=10
     )
     return
 

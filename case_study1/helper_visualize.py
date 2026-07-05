@@ -50,6 +50,7 @@ def create_model_config():
         # EDM family
         "diffusion_edm_vp": "#E7298A",
         "diffusion_edm_vp_ema": "#AD1457",
+        "diffusion_edm_vp_transformer": "#F768A1",  # bright pink
         "diffusion_edm_ve": "#FB9A99",
 
         # Cosine family
@@ -75,8 +76,9 @@ def get_model_name(k=None):
         "consistency_model": r"Discrete Consistency$\,$",
         "stable_consistency_model": r"Continuous Consistency$\,$",
         "diffusion_edm_vp": r"VP EDM$\,$",
-        "diffusion_edm_ve": r"VE EDM$\,$",
         "diffusion_edm_vp_ema": r"VP EDM EMA$\,$",
+        "diffusion_edm_vp_transformer": r"VP EDM (Transformer)$\,$",
+        "diffusion_edm_ve": r"VE EDM$\,$",
         "diffusion_cosine_F": r"Cosine $\mathbf{F}$-pred.$\,$",
         "diffusion_cosine_v": r"Cosine $\boldsymbol{v}$-pred.$\,$",
         "diffusion_cosine_v_lw": r"Cosine $\boldsymbol{v}$-pred. (lw)$\,$",
@@ -101,8 +103,9 @@ def get_model_name_plotly(k=None):  # without LaTeX
         "consistency_model": "Discrete Consistency",
         "stable_consistency_model": "Continuous Consistency",
         "diffusion_edm_vp": "VP EDM",
-        "diffusion_edm_ve": "VE EDM",
         "diffusion_edm_vp_ema": "VP EDM (EMA)",
+        "diffusion_edm_vp_transformer": "VP EDM (Transformer)",
+        "diffusion_edm_ve": "VE EDM",
         "diffusion_cosine_F": "Cosine F-pred.",
         "diffusion_cosine_v": "Cosine v-pred.",
         "diffusion_cosine_v_lw": "Cosine v-pred. (lw)",
@@ -755,7 +758,7 @@ def plot_by_model(df, col='c2st', col_std='std', save_path=None):
         return
 
     unique_models = get_model_name()
-    unique_models = [u for u in unique_models if u in df.model.unique()]
+    unique_models = [u for u in unique_models if u in df.model.unique() and 'consistency' not in u]
     n_models = len(unique_models)
     n_cols = np.ceil(n_models / 2).astype(int)
     colors = create_model_config()['visualization']['colors']
