@@ -567,7 +567,7 @@ def _():
             start=0.0,
             stop=1.0,
             step=0.05,
-            value=1,
+            value=0,
             label="Diffusion time t:",
             show_value=True,
             debounce=True
@@ -888,10 +888,6 @@ def elbow_up_down_constraint(workflow, target="elbow-up"):
     sign = -1.0 if target == "elbow-up" else 1.0
 
     def c_elbow(z):
-        if 'inference_variables' in workflow.approximator.standardize_layers:
-            z = workflow.approximator.standardize_layers["inference_variables"](
-            z, forward=False
-        )
         a1 = z[..., 1]
         return sign * keras.ops.sin(a1)
 
@@ -910,7 +906,7 @@ def _():
         start=0.0, 
         stop=1,
         step=0.01, 
-        value=0,
+        value=1,
         label="Guidance strength λ:",
         show_value=True,
         debounce=True
