@@ -55,7 +55,7 @@ MODELS = {
                             "noise_schedule": "edm",
                             "prediction_type": "F",
                             "schedule_kwargs": {"variance_type": "preserving"},
-                    "subnet": "time_transformer",
+                    "subnet": "diffusion_transformer",
                     "subnet_kwargs": dict(widths=(128, 128, 128, 128, 128))}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",

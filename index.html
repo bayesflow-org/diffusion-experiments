@@ -259,7 +259,7 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
   <div class="container is-max-desktop">
     <div class="columns is-centered has-text-centered">
       <div class="column is-four-fifths">
-        <h2 class="title is-3">Abstract</h2>
+        <h2 class="title is-3">Paper Abstract</h2>
         <div class="content has-text-justified">
           <p>
             Diffusion models have recently emerged as powerful learners for simulation-based inference (SBI), enabling fast and accurate estimation of latent parameters from simulated and real data.
@@ -277,42 +277,23 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
 <!-- End paper abstract -->
 
 
-<!-- Image carousel -->
-<section class="hero is-small">
-  <div class="hero-body">
-    <div class="container is-max-desktop">
-      <div id="results-carousel" class="carousel results-carousel">
-       <div class="item">
-        <img src="static/images/diffusion_model_review.jpg" alt=" What is SBI? What are diffusion models?" loading="lazy"/>
-        <h2 class="subtitle has-text-centered">
-          What is SBI? What are diffusion models?
-        </h2>
-      </div>
-      <div class="item">
-        <!-- Your image here -->
-        <img src="static/images/adaptive_inference.jpg" alt="What makes diffusion models special in SBI?" loading="lazy"/>
-        <h2 class="subtitle has-text-centered">
-          What is special about diffusion models in SBI?
-        </h2>
-      </div>
-      <div class="item">
-        <!-- Your image here -->
-        <img src="static/images/c2st_benchmark_boxplot_best.png" alt="Which are the key design choices? Which design for which problem?" loading="lazy"/>
-        <h2 class="subtitle has-text-centered">
-         Which are the key design choices? Which design for which problem?
-       </h2>
-     </div>
-  </div>
-</div>
-</div>
-</section>
-<!-- End image carousel -->
-
-
-<!-- Generative model animations -->
+<!-- Section 1: Generative models at a glance -->
 <section class="section">
   <div class="container is-max-desktop">
-    <h2 class="title is-3 has-text-centered">Generative models at a glance</h2>
+    <h2 class="title is-3 has-text-centered">Generative Models at a Glance</h2>
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <div class="content has-text-justified">
+          <p>
+            At their core, generative models learn to transport a simple base distribution (noise) into
+            a complex target such as a Bayesian posterior. The animations below contrast four families used
+            for simulation-based inference. Diffusion and flow-matching models follow a learned trajectory
+            from noise to target, consistency models jump there in one or a few steps, and normalizing flows
+            transform the distribution through a stack of invertible layers.
+          </p>
+        </div>
+      </div>
+    </div>
     <div class="columns is-centered">
       <div class="column is-half">
         <video class="rounded-video" autoplay loop muted playsinline preload="metadata">
@@ -343,7 +324,103 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
     </div>
   </div>
 </section>
-<!-- End generative model animations -->
+<!-- End section 1 -->
+
+
+<!-- Section 2: Why learn the score? -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Why learn the score?</h2>
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <div class="content has-text-justified">
+          <p>
+            The score, the gradient of the log-density, &nabla; log <em>p</em>(&theta; | <em>y</em>),
+            is pointing toward regions of high posterior probability. Learning this score buys a
+            powerful property: distributions <em>compose by adding their scores</em>. At inference time we can
+            add extra score terms to impose constraints, swap in a new prior, or combine independent factors &mdash; all without retraining the model.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="columns is-centered">
+      <div class="column is-four-fifths has-text-centered">
+        <figure class="image">
+          <img src="static/images/adaptive_inference.jpg"
+               alt="Composing scores to add constraints, change the prior, or combine factors at inference time"
+               loading="lazy" style="border-radius: var(--border-radius);"/>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End section 2 -->
+
+
+<!-- Section 3: The garden of forking hyperparameter paths -->
+<section class="section hero is-light">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">The Garden of Design Choices</h2>
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <div class="content has-text-justified">
+          <p>
+            Building a diffusion model for SBI involves a lot of decisions, and each one opens
+            further branches. What should the model estimate &mdash; a posterior (NPE), a likelihood
+            (NLE), or the joint distribution? How is noise added over time, and how is the network
+            parameterized and its loss weighted during training? And which ODE or SDE solver should
+            generate samples at inference?
+            Our review maps this garden of design choices and shows how each choice shapes the
+            trade-off between efficiency and accuracy.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="columns is-centered">
+      <div class="column is-four-fifths has-text-centered">
+        <figure class="image">
+          <img src="static/images/diffusion_model_review.jpg"
+               alt="Schematic of training and inference for score-based SBI, highlighting the design choices along the way"
+               loading="lazy" style="border-radius: var(--border-radius);"/>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End section 3 -->
+
+
+
+<!-- Section 4: Benchmarking -->
+<section class="section hero is-light">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Benchmarking</h2>
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <div class="content has-text-justified">
+          <p>
+            Which design works for which problem? We benchmark the main design choices across multiple
+            settings, showing here the low-dimensional case: ten SBI tasks reporting classifier two-sample
+            test (C2ST) accuracy &mdash; where 0.5 means the approximate and true posteriors are
+            indistinguishable. Flow matching and EDM-style diffusion consistently match or outperform a
+            strong NPE baseline, while few-step consistency models trade a little accuracy for much faster
+            sampling.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="columns is-centered">
+      <div class="column is-full has-text-centered">
+        <figure class="image">
+          <img src="static/images/c2st_benchmark_boxplot_best.png"
+               alt="C2ST accuracy of diffusion-model design choices across ten simulation-based inference benchmark tasks"
+               loading="lazy" style="border-radius: var(--border-radius);"/>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End section 4 -->
 
 
 <section class="section">
@@ -432,7 +509,7 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
   <section class="section" id="BibTeX">
     <div class="container is-max-desktop content">
       <div class="bibtex-header">
-        <h2 class="title">BibTeX</h2>
+        <h2 class="title">Citation</h2>
         <button class="copy-bibtex-btn" onclick="copyBibTeX()" title="Copy BibTeX to clipboard">
           <i class="fas fa-copy"></i>
           <span class="copy-text">Copy</span>
@@ -449,6 +526,7 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
 </section>
 <!--End BibTex citation -->
 
+  </main>
 
   <footer class="footer">
   <div class="container">
