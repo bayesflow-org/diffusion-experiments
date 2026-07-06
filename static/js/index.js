@@ -4,6 +4,7 @@ window.HELP_IMPROVE_VIDEOJS = false;
 function toggleMoreWorks() {
     const dropdown = document.getElementById('moreWorksDropdown');
     const button = document.querySelector('.more-works-btn');
+    if (!dropdown || !button) return;
     
     if (dropdown.classList.contains('show')) {
         dropdown.classList.remove('show');
@@ -21,6 +22,7 @@ document.addEventListener('click', function(event) {
     const button = document.querySelector('.more-works-btn');
     
     if (container && !container.contains(event.target)) {
+        if (!dropdown || !button) return;
         dropdown.classList.remove('show');
         button.classList.remove('active');
     }
@@ -31,6 +33,7 @@ document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         const dropdown = document.getElementById('moreWorksDropdown');
         const button = document.querySelector('.more-works-btn');
+        if (!dropdown || !button) return;
         dropdown.classList.remove('show');
         button.classList.remove('active');
     }
@@ -40,18 +43,25 @@ document.addEventListener('keydown', function(event) {
 function copyBibTeX() {
     const bibtexElement = document.getElementById('bibtex-code');
     const button = document.querySelector('.copy-bibtex-btn');
+    if (!bibtexElement || !button) return;
+
     const copyText = button.querySelector('.copy-text');
+    if (!copyText) return;
     
-    if (bibtexElement) {
+    const markCopied = function() {
+        button.classList.add('copied');
+        copyText.textContent = 'Copied';
+
+        setTimeout(function() {
+            button.classList.remove('copied');
+            copyText.textContent = 'Copy';
+        }, 2000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(bibtexElement.textContent).then(function() {
             // Success feedback
-            button.classList.add('copied');
-            copyText.textContent = 'Cop';
-            
-            setTimeout(function() {
-                button.classList.remove('copied');
-                copyText.textContent = 'Copy';
-            }, 2000);
+            markCopied();
         }).catch(function(err) {
             console.error('Failed to copy: ', err);
             // Fallback for older browsers
@@ -62,13 +72,16 @@ function copyBibTeX() {
             document.execCommand('copy');
             document.body.removeChild(textArea);
             
-            button.classList.add('copied');
-            copyText.textContent = 'Cop';
-            setTimeout(function() {
-                button.classList.remove('copied');
-                copyText.textContent = 'Copy';
-            }, 2000);
+            markCopied();
         });
+    } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = bibtexElement.textContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        markCopied();
     }
 }
 
@@ -83,6 +96,8 @@ function scrollToTop() {
 // Show/hide scroll to top button
 window.addEventListener('scroll', function() {
     const scrollButton = document.querySelector('.scroll-to-top');
+    if (!scrollButton) return;
+
     if (window.pageYOffset > 300) {
         scrollButton.classList.add('visible');
     } else {
@@ -119,7 +134,7 @@ function setupVideoCarouselAutoplay() {
     });
 }
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
     // Check for click events on the navbar burger icon
 
     var options = {
@@ -132,11 +147,15 @@ $(document).ready(function() {
     }
 
 	// Initialize all div with carousel class
-    var carousels = bulmaCarousel.attach('.carousel', options);
+    if (window.bulmaCarousel) {
+        bulmaCarousel.attach('.carousel', options);
+    }
 	
-    bulmaSlider.attach();
+    if (window.bulmaSlider) {
+        bulmaSlider.attach();
+    }
     
     // Setup video autoplay for carousel
     setupVideoCarouselAutoplay();
 
-})
+});
