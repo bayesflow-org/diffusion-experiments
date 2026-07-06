@@ -296,13 +296,13 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
     </div>
     <div class="columns is-centered">
       <div class="column is-half">
-        <video class="rounded-video" autoplay loop muted playsinline preload="metadata">
+        <video class="rounded-video" autoplay loop muted playsinline preload="auto">
           <source src="static/videos/ReverseSDE.mp4" type="video/mp4">
         </video>
         <h2 class="subtitle has-text-centered">Diffusion (reverse SDE)</h2>
       </div>
       <div class="column is-half">
-        <video class="rounded-video" autoplay loop muted playsinline preload="metadata">
+        <video class="rounded-video" autoplay loop muted playsinline preload="auto">
           <source src="static/videos/ReverseODE.mp4" type="video/mp4">
         </video>
         <h2 class="subtitle has-text-centered">Flow Matching (reverse ODE)</h2>
@@ -310,13 +310,13 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
     </div>
     <div class="columns is-centered">
       <div class="column is-half">
-        <video class="rounded-video" autoplay loop muted playsinline preload="metadata">
+        <video class="rounded-video" autoplay loop muted playsinline preload="auto">
           <source src="static/videos/ConsistencyMultistep.mp4" type="video/mp4">
         </video>
         <h2 class="subtitle has-text-centered">Consistency Model</h2>
       </div>
       <div class="column is-half">
-        <video class="rounded-video" autoplay loop muted playsinline preload="metadata">
+        <video class="rounded-video" autoplay loop muted playsinline preload="auto">
           <source src="static/videos/NFLayers.mp4" type="video/mp4">
         </video>
         <h2 class="subtitle has-text-centered">Normalizing Flow</h2>
@@ -558,6 +558,51 @@ Finally, we illustrate these concepts with case studies across parameter dimensi
 
   </div>
 </footer>
+
+<script>
+  // Keep the .rounded-video elements looping in unison
+  (function () {
+    var videos = Array.prototype.slice.call(document.querySelectorAll('.rounded-video'));
+    if (!videos.length) return;
+
+    // Drop native looping so we can restart the whole set together on 'ended'.
+    videos.forEach(function (v) { v.loop = false; });
+
+    function startAll() {
+      videos.forEach(function (v) {
+        v.currentTime = 0;
+        var p = v.play();
+        if (p && p.catch) p.catch(function () {});
+      });
+    }
+
+    // Restart everyone once all videos have reached their end.
+    var ended = 0;
+    videos.forEach(function (v) {
+      v.addEventListener('ended', function () {
+        ended += 1;
+        if (ended >= videos.length) {
+          ended = 0;
+          startAll();
+        }
+      });
+    });
+
+    // Wait until every video can play through before the first synced start.
+    var ready = 0;
+    function markReady() {
+      ready += 1;
+      if (ready >= videos.length) startAll();
+    }
+    videos.forEach(function (v) {
+      if (v.readyState >= 4) {
+        markReady();
+      } else {
+        v.addEventListener('canplaythrough', markReady, { once: true });
+      }
+    });
+  })();
+</script>
 
 </body>
 </html>
