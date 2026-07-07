@@ -64,11 +64,16 @@ else:
     workflow.approximator = keras.models.load_model(model_path)
 
 # %%
+posterior_full = workflow.sample(
+    conditions=obs,
+    num_samples=NUM_SAMPLES,
+)["parameters"][0]
+
 # 1. Guided posterior: steer sampling toward the "elbow-up" (upper arm raised)
 def elbow_up_constraint(z):
     return -keras.ops.sin(z[..., 1])
 
-posterior_full = workflow.sample(
+posterior_guided = workflow.sample(
     conditions=obs,
     num_samples=NUM_SAMPLES,
     guidance_kwargs=dict(constraints=[elbow_up_constraint]),
@@ -114,13 +119,14 @@ EMPTY = r"\emptyset"   # masked: missing observation / marginalized parameter
 
 
 panels = [
-    (f"Guided \n${YOBS} = (1.5,\\,0)$\n$(\\theta_1,\\,\\theta_2,\\,\\theta_3,\\,\\theta_4), \\sin(\\theta_2) \\geq 0$", posterior_full),
-    (f"Masked condition\n${YOBS} = (1.5,\\,{EMPTY})$\n${THETA} = (\\theta_1,\\,\\theta_2,\\,\\theta_3,\\,\\theta_4)$", posterior_missing_obs),
+    (f"Posterior \n${YOBS} = (1.5,\\,0)$\n$(\\theta_1,\\,\\theta_2,\\,\\theta_3,\\,\\theta_4)$", posterior_full),
+    (f"Guided \n${YOBS} = (1.5,\\,0)$\n$(\\theta_1,\\,\\theta_2,\\,\\theta_3,\\,\\theta_4), \\sin(\\theta_2) \\geq 0$", posterior_guided),
+    (f"Missing condition\n${YOBS} = (1.5,\\,{EMPTY})$\n${THETA} = (\\theta_1,\\,\\theta_2,\\,\\theta_3,\\,\\theta_4)$", posterior_missing_obs),
     (f"Marginalized target\n${YOBS} = (1.5,\\,0)$\n${THETA} = ({EMPTY},\\,\\theta_2,\\,\\theta_3,\\,\\theta_4)$", posterior_drop_height),
     (f"Fixed target\n${YOBS} = (1.5,\\,0)$\n${THETA} = (\\theta_1=0,\\,\\theta_2,\\,\\theta_3,\\,\\theta_4)$", posterior_fix_height),
 ]
 
-fig, axarr = plt.subplots(1, 4, figsize=(10, 3.4),
+fig, axarr = plt.subplots(1, 5, figsize=(10, 3.4),
                           subplot_kw=dict(box_aspect=1), squeeze=False, layout="constrained")
 
 for (title, samples), ax in zip(panels, axarr.flat):
