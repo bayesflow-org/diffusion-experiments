@@ -48,8 +48,9 @@ workflow = bf.BasicWorkflow(
     adapter=adapter,
     inference_network=bf.networks.DiffusionModel(
         subnet="diffusion_transformer",
-        drop_target_prob=0.3,   # sometimes condition on a parameter instead of inferring it
-        drop_missing_prob=0.3,  # sometimes mark a parameter/observation as missing
+        fixed_target_prob=0.3,  # sometimes mark a parameter as fixed
+        missing_conditions_prob=0.3,   # sometimes condition on a parameter instead of inferring it
+        missing_target_prob=0.3,  # sometimes mark a parameter as missing
     ),
     standardize="inference_conditions",
 )
@@ -81,20 +82,20 @@ posterior_guided = workflow.sample(
 
 # 2. Masked conditional: drop the x-coordinate of the observation and mark it as
 #    missing. condition_mask has one entry per observation dimension; 0 = missing.
-condition_mask = np.array([[0.0, 1.0]])
+observed_condition_mask = np.array([[0.0, 1.0]])
 posterior_missing_obs = workflow.sample(
     conditions=obs,
     num_samples=NUM_SAMPLES,
-    condition_mask=condition_mask,
+    observed_condition_mask=observed_condition_mask,
 )["parameters"][0]
 
 # 3. Masked target: mark the arm's height offset h (parameter index 0) as
-#    missing via target_condition_mask, so the network marginalizes it out.
-target_condition_mask = np.array([[0.0, 1.0, 1.0, 1.0]])  # drop height, keep three angles
+#    missing via infer_target_mask, so the network marginalizes it out.
+infer_target_mask = np.array([[0.0, 1.0, 1.0, 1.0]])  # drop height, keep three angles
 posterior_drop_height = workflow.sample(
     conditions=obs,
     num_samples=NUM_SAMPLES,
-    target_condition_mask=target_condition_mask,
+    infer_target_mask=infer_target_mask,
 )["parameters"][0]
 # The marginalized height is pure latent noise. Draw it from the prior instead
 height_prior_sigma = InverseKinematicsModel().sigmas[0]
@@ -102,14 +103,14 @@ posterior_drop_height[:, 0] = np.random.default_rng(42).normal(
     0.0, height_prior_sigma, size=NUM_SAMPLES
 )
 
-# 4. Fixed target: fix the height to a known value via target_inference_mask
-#    (1 = inferred, 0 = fixed) together with targets_fixed.
-targets_fixed = np.array([[0.0, 0.0, 0.0, 0.0]])
+# 4. Fixed target: fix the height to a known value via fixed_target_mask
+#    (1 = inferred, 0 = fixed) together with fixed_target_value.
+fixed_target_value = np.array([[0.0, 0.0, 0.0, 0.0]])
 posterior_fix_height = workflow.sample(
     conditions=obs,
     num_samples=NUM_SAMPLES,
-    target_inference_mask=target_condition_mask,
-    targets_fixed=targets_fixed,
+    fixed_target_mask=infer_target_mask,
+    fixed_target_value=fixed_target_value,
 )["parameters"][0]
 
 # %%
