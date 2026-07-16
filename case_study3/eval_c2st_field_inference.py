@@ -48,8 +48,8 @@ def get_data_dict(dataset_kwargs, training_kwargs):
     return data_dict, simulator
 
 
-def get_summary_df(mode, shape, run):
-    df = pd.read_csv(os.path.join(f"{run}_plots", f"all_{run}_summary_like.csv"))
+def get_summary_df(mode, shape, run_summary_path):
+    df = pd.read_csv(run_summary_path)
     df["dataset.shape"] = df["dataset.shape"].apply(lambda x: int(x[1:-1].split(",")[0]))
     df = df.rename(columns={
         "Name": "wandb_name",
@@ -57,7 +57,7 @@ def get_summary_df(mode, shape, run):
         "model.model_name": "model_type",
         "training.mode": "mode",
     })
-    df = df[(df["mode"] == mode) & (df["shape"] == shape)]
+    df = df[(df["mode"] == mode) & (df["shape"] == shape[0])]
     return df
 
 
@@ -120,10 +120,12 @@ if __name__ == "__main__":
     import os
     from keras.utils import clear_session
 
-    from network_helpers import ResNetSummary
-    import padded_unet  # needed for loading approximator from ckpt
+    from network_helpers.resnet_summary import ResNetSummary
+    #from network_helpers import padded_unet  # needed for loading approximator from ckpt
 
-    modes = ["online", "offline"]
+    #modes = ["online", "offline"]
+    modes = ["online"]
+    overwrite = False
 
     dataset_kwargs = {
         "seed": 84,
@@ -173,30 +175,64 @@ if __name__ == "__main__":
             "dropout": 0.0,
         },
     }
+
     parameter = "field"
-    shapes = [(2**n, 2**n) for n in range(3, 8)] # From 8x8 to 128x128 field sizes
-    config = "run7"
+    #shapes = [(2**n, 2**n) for n in range(7,8)]#range(3, 8)] # From 8x8 to 128x128 field sizes
+    shapes = [(128, 128)]
+    run_summary_path = "new_residualuvit.csv"
     for shape in shapes:
         for mode in modes:
-            df = get_summary_df(mode, shape, config)
+            df = get_summary_df(mode, shape, run_summary_path)
             for runidx, run in tqdm(df.iterrows(), desc=f"models left at {mode} shape {shape}"):
                 print(f"{mode} {run['wandb_name']}: shape {run['shape']}, model {run['model_type']}")
                 proj_dir = os.path.join(f"{run['model_type']}", "NLE", f"{run['shape']}", run["wandb_name"])
                 ckpt_dir = os.path.join(proj_dir, "checkpoints")
+                if os.path.exists(os.path.join(ckpt_dir, "classifier.keras")) and not overwrite:
+                    print("Classifier already exists, skipping...")
+                    continue
+                else:
+                    print("Classifier does not exist or overwrite is True, proceeding with training...")
                 ckpt_approx_file_path = os.path.join(ckpt_dir, f"{run['wandb_name']}.keras")
                 figure_dir = os.path.join(proj_dir, "figures")
-
-                print("load approximator")
-                approximator = keras.saving.load_model(ckpt_approx_file_path)
 
                 print("get classifier data")
                 dataset_kwargs = dataset_kwargs | {
                     "shape": 2 * (run["shape"],),
                 }
                 data_dict, simulator = get_data_dict(dataset_kwargs, training_kwargs)
-                x, y = get_classifier_training_data(data_dict, approximator, run, key="train")
-                x_val, y_val = get_classifier_training_data(data_dict, approximator, run, key="validation")
-
+                # see if train data already exists:
+                if os.path.exists(os.path.join(proj_dir, "train_data.npz")):
+                    # save train & val samples
+                    print("load train data")
+                    # load from npz
+                    with np.load(os.path.join(proj_dir, "train_data.npz"), allow_pickle=True) as data:
+                        train_data = data["arr_0"].item()
+                    x = train_data["x"]
+                    y = train_data["y"]
+                    del train_data
+                else:
+                    print("generate train data")
+                    print("load approximator")
+                    approximator = keras.saving.load_model(ckpt_approx_file_path)
+                    x, y = get_classifier_training_data(data_dict, approximator, run, key="train")
+                    # save train samples
+                    np.savez_compressed(os.path.join(proj_dir, "train_data.npz"), {"x": x, "y": y})
+                    del approximator
+                if os.path.exists(os.path.join(proj_dir, "val_data.npz")):
+                    print("load test data")
+                    with np.load(os.path.join(proj_dir, "val_data.npz"), allow_pickle=True) as data:
+                        val_data = data["arr_0"].item()
+                    x_val = val_data["x"]
+                    y_val = val_data["y"]
+                    del val_data
+                else:
+                    print("generate test data")
+                    print("load approximator")
+                    approximator = keras.saving.load_model(ckpt_approx_file_path)
+                    x_val, y_val = get_classifier_training_data(data_dict, approximator, run, key="validation")
+                    # save val samples
+                    np.savez_compressed(os.path.join(proj_dir, "val_data.npz"), {"x": x_val, "y": y_val})
+                    del approximator
                 print("load classifier")
                 classifier_kwargs = model_kwargs[f"shape_config_{run['shape']}"]
                 inputs = keras.Input((run["shape"], run["shape"], 3))
@@ -204,7 +240,7 @@ if __name__ == "__main__":
                 classifier = keras.Model(inputs=inputs, outputs=outputs)
                 classifier.summary()
                 classifier.compile(
-                    optimizer=keras.optimizers.AdamW(learning_rate=1e-3, weight_decay=1e-2),
+                    optimizer=keras.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-4),
                     loss=keras.losses.BinaryCrossentropy(from_logits=True),
                     metrics=[keras.metrics.BinaryAccuracy(name="accuracy")],
                 )
@@ -250,13 +286,9 @@ if __name__ == "__main__":
                 # save model & classifier
                 keras.saving.save_model(classifier, os.path.join(ckpt_dir, "classifier.keras"))
 
-                # save train & val samples
-                np.savez_compressed(os.path.join(proj_dir, "train_data.npz"), {"x": x, "y": y})
-                np.savez_compressed(os.path.join(proj_dir, "val_data.npz"), {"x": x_val, "y": y_val})
-
                 # save train history
                 np.save(os.path.join(proj_dir, f"classifier_history_{parameter}.npy"), history.history)
 
                 clear_session()
-                del x, y, x_val, y_val, approximator, classifier, history, data_dict, simulator
+                del x, y, x_val, y_val, classifier, history, data_dict, simulator, early_stopping
                 print("Done.")

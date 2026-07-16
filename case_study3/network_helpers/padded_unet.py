@@ -75,7 +75,9 @@ class PaddedUNetSubnet(keras.Layer):
 
         self.last_channels = widths[-1]
 
-    def call(self, x, t, conditions, training=False):
+    #def call(self, x, t, conditions, training=False):
+    def call(self, inputs, training=False):
+        x, t, conditions = inputs
         t = keras.ops.broadcast_to(t, keras.ops.shape(x)[:-1] + (1,))
         h = keras.ops.concatenate((x, t, conditions), axis=-1)
         skip_connections = []
@@ -92,13 +94,17 @@ class PaddedUNetSubnet(keras.Layer):
         return h
 
     def build(self, x_shape, t_shape, conditions_shape):
+    #def build(self, input_shape):
+        #x_shape, t_shape, cond_shape = input_shape
         if self.built:
             return
         x, t, c = keras.ops.zeros(x_shape), keras.ops.zeros(t_shape), keras.ops.zeros(conditions_shape)
         self.call(x, t, c)
 
-    def compute_output_shape(self, x_shape, t_shape, conditions_shape):
-        x, t, c = keras.ops.zeros(x_shape), keras.ops.zeros(t_shape), keras.ops.zeros(conditions_shape)
+    #def compute_output_shape(self, x_shape, t_shape, conditions_shape):
+    def compute_output_shape(self, input_shape):
+        x_shape, t_shape, cond_shape = input_shape
+        x, t, c = keras.ops.zeros(x_shape), keras.ops.zeros(t_shape), keras.ops.zeros(cond_shape)
         out = self.call(x, t, c)
         out_shape = keras.ops.shape(out)
         return out_shape

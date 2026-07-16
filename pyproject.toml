@@ -10,7 +10,7 @@ dependencies = [
     "colorcet>=3.1.0",
     "fides==0.8.0",
     "fyeldgenerator>=0.1.7",
-    "jax>=0.7.1",
+    "jax[cuda13]>=0.7.1",
     "joblib==1.5.2",
     "marimo>=0.19.6",
     "matplotlib>=3.10.8",

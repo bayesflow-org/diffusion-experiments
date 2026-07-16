@@ -3,7 +3,7 @@ import numpy as np
 
 import bayesflow as bf
 from bayesflow.diagnostics.metrics import root_mean_squared_error
-from network_helpers import ResNetSummary
+from network_helpers.resnet_summary import ResNetSummary
 
 from keras.utils import clear_session
 import matplotlib.pyplot as plt

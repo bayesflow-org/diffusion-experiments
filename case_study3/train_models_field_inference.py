@@ -4,7 +4,7 @@ import bayesflow as bf
 from keras.utils import clear_session
 import matplotlib.pyplot as plt
 
-from network_helpers.padded_unet import PaddedUNetSubnet
+from bayesflow.networks import UNet, UViT, ResidualUViT
 
 
 def train_model(config, conf_tuple, data_dict, simulator, wandb_run):
@@ -17,7 +17,7 @@ def train_model(config, conf_tuple, data_dict, simulator, wandb_run):
 
     inference_net_kwargs = conf_tuple[1] | {
         "subnet": eval(config["model"]["subnet"]),
-        "subnet_kwargs": config["model"][config["model"]["subnet"]]["subnet_kwargs"],
+        "subnet_kwargs": config["model"]["subnet_kwargs"],
     }
     inference_network = eval(conf_tuple[0])(**inference_net_kwargs)
     if config["training"]["mode"] == "offline":
@@ -108,7 +108,8 @@ if __name__ == "__main__":
         "total_samples": int(5000) // 32 * 500,
     }
     modes = ["online", "offline"]
-    shapes = [(2**n, 2**n) for n in range(3, 8)] # From 8x8 to 128x128 field sizes
+    modes = ["offline"]
+    shapes = [(2**n, 2**n) for n in range(7, 8)] # From 8x8 to 128x128 field sizes
     seed = 42
     dataset_kwargs = {
         "seed": seed,
@@ -129,107 +130,196 @@ if __name__ == "__main__":
             "integrate_kwargs": integrate_kwargs,
         }),
     }
+    #SUBNETS = ["UNet", "UViT", "ResidualUViT"]
+    SUBNETS = ["ResidualUViT"]
 
     model_kwargs = {
         "shape_config_8": {
-            "subnet": "PaddedUNetSubnet",
-            "PaddedUNetSubnet": {
+            "UNet": {
                 "subnet_kwargs": {
-                    "widths": 2*[32,],
-                    "activation": "mish",
-                    "use_batchnorm": False,
-                    "dropout": 0.0,
-                    "num_res_blocks": 2*[2,],
-                    "pad_size": 0,
+                    "widths": 2*(32,),
+                    "res_blocks": 2,
+                    "attn_stage": None,
+                },
+            },
+            "UViT": {
+                "subnet_kwargs": {
+                    "widths": 2*(32,),
+                    "res_blocks": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [True, False],
+                },
+            },
+            "ResidualUViT": {
+                "subnet_kwargs": {
+                    "widths": 2*(32,),
+                    "res_blocks_up": 3,
+                    "res_blocks_down": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [True, False],
                 },
             },
         },
         "shape_config_16": {
-            "subnet": "PaddedUNetSubnet",
-            "PaddedUNetSubnet": {
+            "UNet": {
                 "subnet_kwargs": {
-                    "widths": 3*[32,],
-                    "activation": "mish",
-                    "use_batchnorm": False,
-                    "dropout": 0.0,
-                    "num_res_blocks": 3*[2,],
-                    "pad_size": 3,
+                    "widths": 3 * (32,),
+                    "res_blocks": 2,
+                    "attn_stage": None,
+                },
+            },
+            "UViT": {
+                "subnet_kwargs": {
+                    "widths": 3 * (32,),
+                    "res_blocks": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [True, True, False],
+                },
+            },
+            "ResidualUViT": {
+                "subnet_kwargs": {
+                    "widths": 3 * (32,),
+                    "res_blocks_up": 3,
+                    "res_blocks_down": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [True, True, False],
                 },
             },
         },
         "shape_config_32": {
-            "subnet": "PaddedUNetSubnet",
-            "PaddedUNetSubnet": {
+            "UNet": {
                 "subnet_kwargs": {
-                    "widths": 3 * [32, ],
-                    "activation": "mish",
-                    "use_batchnorm": False,
-                    "dropout": 0.0,
-                    "num_res_blocks": 3 * [2, ],
-                    "pad_size": 5,
+                    "widths": 3 * (32,),
+                    "res_blocks": 2,
+                    "attn_stage": None,
+                },
+            },
+            "UViT": {
+                "subnet_kwargs": {
+                    "widths": 3 * (32,),
+                    "res_blocks": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [False, True, True],
+                },
+            },
+            "ResidualUViT": {
+                "subnet_kwargs": {
+                    "widths": 3 * (32,),
+                    "res_blocks_up": 3,
+                    "res_blocks_down": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [False, True, True],
                 },
             },
         },
         "shape_config_64": {
-            "subnet": "PaddedUNetSubnet",
-            "PaddedUNetSubnet": {
+            "UNet": {
                 "subnet_kwargs": {
-                    "widths": 4*[32,],
-                    "activation": "mish",
-                    "use_batchnorm": False,
-                    "dropout": 0.0,
-                    "num_res_blocks": 4*[2,],
-                    "pad_size": 5,
+                    "widths": 4 * (32,),
+                    "res_blocks": 2,
+                    "attn_stage": None,
+                },
+            },
+            "UViT": {
+                "subnet_kwargs": {
+                    "widths": 4 * (32,),
+                    "res_blocks": 3,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [False, False, True, True],
+                },
+            },
+            "ResidualUViT": {
+                "subnet_kwargs": {
+                    "widths": 4 * (32,),
+                    "res_blocks_up": 3,
+                    "res_blocks_down": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [False, False, True, True],
                 },
             },
         },
         "shape_config_128": {
-            "subnet": "PaddedUNetSubnet",
-            "PaddedUNetSubnet": {
+            "UNet": {
                 "subnet_kwargs": {
-                    "widths": 5*[32,],
-                    "activation": "mish",
-                    "use_batchnorm": False,
-                    "dropout": 0.0,
-                    "num_res_blocks": 5 * [2, ],
-                    "pad_size": 5,
+                    "widths": 5 * (32,),
+                    "res_blocks": 2,
+                    "attn_stage": None,
+                },
+            },
+            "UViT": {
+                "subnet_kwargs": {
+                    "widths": 5 * (32,),
+                    "res_blocks": 3,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [False, False, False, True, True],
+                },
+            },
+            "ResidualUViT": {
+                "subnet_kwargs": {
+                    "widths": 5 * (32,),
+                    "res_blocks_up": 3,
+                    "res_blocks_down": 2,
+                    "transformer_blocks": 2,
+                    "transformer_dropout": 0.1,
+                    "transformer_width": 32,
+                    "attn_stage": [False, False, False, True, True],
                 },
             },
         },
     }
 
-    for shape in shapes:
-        dataset_kwargs = dataset_kwargs | {"shape": shape}
-        for mode in modes:
-            training_kwargs = training_kwargs | {"mode": mode}
-            for model_name, conf_tuple in MODELS.items():
-                data_dict, simulator = get_data_dict(dataset_kwargs, training_kwargs)
-                current_model_kwargs = {"model_name": model_name} | model_kwargs[f"shape_config_{shape[0]}"] | {
-                    "model_name_kwargs": conf_tuple[1]}
-                bf.utils.logging.info(
-                    f"Training {model_name} on {dataset_kwargs['name']} with shape {shape} in {training_kwargs['mode']} mode")
-                config = {
-                    "training": training_kwargs,
-                    "model": current_model_kwargs,
-                    "dataset": dataset_kwargs,
-                }
-                wandb_run = wandb.init(
-                    project="case3-diffusion-review-grf-like",
-                    entity="your_wandb_entity",
-                    dir="wandb_results",
-                    config=config,
-                )
-                proj_dir = os.path.join(f"{model_name}", "NLE", f"{shape[0]}", wandb_run.name)
-                ckpt_dir = os.path.join(proj_dir, "checkpoints")
-                figure_dir = os.path.join(proj_dir, "figures")
-                os.makedirs(proj_dir, exist_ok=True)
-                os.makedirs(ckpt_dir, exist_ok=True)
-                os.makedirs(figure_dir, exist_ok=True)
-                config["proj_dir"] = proj_dir
-                config["ckpt_dir"] = ckpt_dir
-                config["figure_dir"] = figure_dir
-                config["wandb_run_name"] = wandb_run.name
-                train_model(config, conf_tuple, data_dict, simulator, wandb_run)
-                clear_session()
-                del data_dict, simulator
-                wandb_run.finish()
+    for subnet_key in SUBNETS:
+        for shape in shapes:
+            dataset_kwargs = dataset_kwargs | {"shape": shape}
+            for mode in modes:
+                training_kwargs = training_kwargs | {"mode": mode}
+                for model_name, conf_tuple in MODELS.items():
+                    data_dict, simulator = get_data_dict(dataset_kwargs, training_kwargs)
+                    current_model_kwargs = {"model_name": model_name} | model_kwargs[f"shape_config_{shape[0]}"][subnet_key] | {
+                        "model_name_kwargs": conf_tuple[1]} | {"subnet": subnet_key}
+                    bf.utils.logging.info(
+                        f"Training {model_name} on {dataset_kwargs['name']} with shape {shape} in {training_kwargs['mode']} mode")
+                    config = {
+                        "training": training_kwargs,
+                        "model": current_model_kwargs,
+                        "dataset": dataset_kwargs,
+                    }
+
+                    wandb_run = wandb.init(
+                        project="case3-diffusion-review-grf-like-bf-resuvit",
+                        entity="nielsbracher",
+                        dir="wandb_results",
+                        config=config,
+                    )
+                    proj_dir = os.path.join(f"{model_name}", "NLE", f"{shape[0]}", wandb_run.name)
+                    ckpt_dir = os.path.join(proj_dir, "checkpoints")
+                    figure_dir = os.path.join(proj_dir, "figures")
+                    os.makedirs(proj_dir, exist_ok=True)
+                    os.makedirs(ckpt_dir, exist_ok=True)
+                    os.makedirs(figure_dir, exist_ok=True)
+                    config["proj_dir"] = proj_dir
+                    config["ckpt_dir"] = ckpt_dir
+                    config["figure_dir"] = figure_dir
+                    config["wandb_run_name"] = wandb_run.name
+                    train_model(config, conf_tuple, data_dict, simulator, wandb_run)
+                    clear_session()
+                    del data_dict, simulator
+                    wandb_run.finish()
