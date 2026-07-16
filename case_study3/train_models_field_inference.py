@@ -108,8 +108,7 @@ if __name__ == "__main__":
         "total_samples": int(5000) // 32 * 500,
     }
     modes = ["online", "offline"]
-    modes = ["offline"]
-    shapes = [(2**n, 2**n) for n in range(7, 8)] # From 8x8 to 128x128 field sizes
+    shapes = [(2**n, 2**n) for n in range(3, 8)] # From 8x8 to 128x128 field sizes
     seed = 42
     dataset_kwargs = {
         "seed": seed,
@@ -130,8 +129,7 @@ if __name__ == "__main__":
             "integrate_kwargs": integrate_kwargs,
         }),
     }
-    #SUBNETS = ["UNet", "UViT", "ResidualUViT"]
-    SUBNETS = ["ResidualUViT"]
+    SUBNETS = ["UNet", "UViT", "ResidualUViT"]
 
     model_kwargs = {
         "shape_config_8": {
@@ -304,8 +302,8 @@ if __name__ == "__main__":
                     }
 
                     wandb_run = wandb.init(
-                        project="case3-diffusion-review-grf-like-bf-resuvit",
-                        entity="nielsbracher",
+                        project=f"case3-diffusion-review-grf-like-bf-{model_name}",
+                        entity="your-wandb-entity",
                         dir="wandb_results",
                         config=config,
                     )
