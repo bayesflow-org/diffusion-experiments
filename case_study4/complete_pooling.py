@@ -2,8 +2,11 @@
 import os
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
+import re
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 import pickle
 from scipy.stats import median_abs_deviation
 
@@ -143,3 +146,174 @@ metrics = {
 
 with open(BASE / 'metrics' / f'complete_pooling_metrics_{N_TRIALS}.pkl', 'wb') as f:
     pickle.dump(metrics, f)
+
+#%%
+# analysis of different choices
+class StepCountHandler(logging.Handler):
+    """Capture integration step counts emitted by BayesFlow."""
+
+    _pattern = re.compile(r"Finished integration after (\d+)")
+
+    def __init__(self):
+        super().__init__(logging.DEBUG)
+        self.steps = []
+
+    def emit(self, record):
+        match = self._pattern.search(record.getMessage())
+        if match:
+            self.steps.append(int(match.group(1)))
+
+    def reset(self):
+        self.steps.clear()
+
+bf_logger = logging.getLogger("bayesflow")
+step_handler = StepCountHandler()
+bf_logger.addHandler(step_handler)
+bf_logger.setLevel(logging.DEBUG)
+
+def metric_with_spread(estimates, targets, keys):
+    """Point estimate (default aggregation) plus MAD spread over datasets, averaged over params."""
+    point_nrmse = np.mean(nrmse(estimates, targets, variable_keys=keys)['values'])
+    err_nrmse = np.mean(nrmse(estimates, targets, variable_keys=keys,
+                              aggregation=median_abs_deviation)['values'])
+    point_cal = np.mean(ece(estimates, targets, variable_keys=keys)['values'])
+    err_cal = np.mean(ece(estimates, targets, variable_keys=keys,
+                          aggregation=median_abs_deviation)['values'])
+    return point_nrmse, err_nrmse, point_cal, err_cal
+
+
+#%%
+mini_batch_fractions = [0.1, 0.5, 1.0]  # mini-batch size as a percentage of the number of factors
+damping_factors = [0.001, 0.01, 0.1, 1.0]
+n_factors_list = [2, 10, 20, 50, 75, 100]
+
+if os.path.exists(BASE / 'metrics' / f'detailed_analysis_{N_TRIALS}.pkl'):
+    with open(BASE / 'metrics' / f'detailed_analysis_{N_TRIALS}.pkl', 'rb') as f:
+        detailed_results = pickle.load(f)
+else:
+    logging.info("Starting detailed compositional analysis...")
+    detailed_results = {}  # (mini_batch_fraction, damping) -> {'n_factors', 'nrmse', 'calibration'}
+    for mini_batch_fraction in mini_batch_fractions:
+        for damping in damping_factors:
+            n_factors_used = []
+            nrmse_vals, nrmse_err, cal_vals, cal_err = [], [], [], []
+            steps_vals, steps_err = [], []
+            for n_factors in n_factors_list:
+                mini_batch = max(1, int(round(mini_batch_fraction * n_factors)))
+
+                step_handler.reset()  # capture the per-batch integration steps for this run
+                post = workflow_trials.compositional_sample(
+                    num_samples=N_SAMPLES,
+                    conditions={'sim_data': test_data['sim_data'][:, :n_factors]},
+                    compute_prior_score=prior_flat_score,
+                    mini_batch_size=mini_batch,
+                    method=METHOD,
+                    steps=STEPS,
+                    max_steps=MAX_STEP,
+                    batch_size=BATCH_SIZE,
+                    compositional_bridge_d0=damping,
+                )
+                post['beta'] = beta_from_normal(post['beta_raw'])
+                post.pop('beta_raw')
+                post['alpha'] = np.exp(post['log_alpha'])
+                post['t0'] = np.exp(post['log_t0'])
+
+                # point estimate over all datasets; error bar = MAD spread over datasets
+                p_nrmse, e_nrmse, p_cal, e_cal = metric_with_spread(post, test_data, param_metrics)
+
+                # per-batch integration steps captured from the DEBUG logs during this run
+                batch_steps = np.asarray(step_handler.steps)
+
+                n_factors_used.append(n_factors)
+                nrmse_vals.append(p_nrmse)
+                nrmse_err.append(e_nrmse)
+                cal_vals.append(p_cal)
+                cal_err.append(e_cal)
+                steps_vals.append(np.mean(batch_steps) if batch_steps.size else np.nan)
+                steps_err.append(np.std(batch_steps) if batch_steps.size else np.nan)
+
+            detailed_results[(mini_batch_fraction, damping)] = {
+                'n_factors': np.array(n_factors_used),
+                'nrmse': np.array(nrmse_vals),
+                'nrmse_err': np.array(nrmse_err),
+                'calibration': np.array(cal_vals),
+                'calibration_err': np.array(cal_err),
+                'steps': np.array(steps_vals),  # mean per-batch integration steps
+                'steps_err': np.array(steps_err),  # std of per-batch integration steps
+            }
+
+    with open(BASE / 'metrics' / f'detailed_analysis_{N_TRIALS}.pkl', 'wb') as f:
+        pickle.dump(detailed_results, f)
+
+#%%
+# single hue = create_figure.py's 'Complete Pooling' color; damping factors are told apart
+# by shade (light -> dark), line style, and marker instead of by different hues
+pooling_color = "#7570B3"  # muted purple
+fontsize = 11
+
+def _shades(hex_color, n):
+    """n shades of hex_color, ordered light -> dark."""
+    base = np.array(mcolors.to_rgb(hex_color))
+    light = 1 - 0.6 * (1 - base)  # blended toward white
+    dark = 0.4 * base             # blended toward black
+    cmap = mcolors.LinearSegmentedColormap.from_list('pooling_shades', [light, dark])
+    return [mcolors.to_hex(cmap(x)) for x in np.linspace(0, 1, n)]
+
+# grid of small multiples: one row per metric, one column per mini-batch fraction.
+metric_rows = [
+    ('nrmse', 'nrmse_err', 'NRMSE'),
+    ('calibration', 'calibration_err', 'Calibration Error'),
+    ('steps', 'steps_err', 'Steps'),
+]
+damping_markers = ['o', 's', '^', 'D']
+damping_linestyles = ['-', '--', '-.', ':']
+damping_shades = _shades(pooling_color, len(damping_factors))
+
+fig, axes = plt.subplots(len(metric_rows), len(mini_batch_fractions),
+                         figsize=(10, 5),
+                         sharex=True, sharey='row', squeeze=False, layout='constrained')
+
+for r, (key, err_key, ylabel) in enumerate(metric_rows):
+    for c, mini_batch_fraction in enumerate(mini_batch_fractions):
+        ax = axes[r, c]
+        for damping, marker, linestyle, shade in zip(damping_factors, damping_markers,
+                                                      damping_linestyles, damping_shades):
+            res = detailed_results[(mini_batch_fraction, damping)]
+            # clip lower error bars so they don't extend below zero
+            yerr = [np.minimum(res[err_key], res[key]), res[err_key]]
+            ax.errorbar(res['n_factors'], res[key], yerr=yerr,
+                        marker=marker, linestyle=linestyle, color=shade,
+                        capsize=3, label=fr'$d_0={damping}$')
+
+        if key == 'steps':
+            # dashed black line marking the integration step ceiling
+            ax.axhline(MAX_STEP, color='black', linestyle='--', linewidth=1)
+            ax.text(0.65, MAX_STEP-20, 'max steps', color='black', fontsize=fontsize - 1,
+                    ha='right', va='top', transform=ax.get_yaxis_transform())
+
+
+        ax.set_xticks(n_factors_list)  # ticks only where we have data
+        ax.set_xlim(0, N_SUBJECTS)
+        ax.tick_params(labelsize=fontsize)
+        ax.grid(True)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        if r == 0:
+            ax.set_title(f'Mini-Batch = {int(mini_batch_fraction * 100)}% of Groups', fontsize=fontsize)
+        if r == len(metric_rows) - 1:
+            ax.set_xlabel('Number of Groups', fontsize=fontsize)
+        if c == 0:
+            ax.set_ylabel(ylabel, fontsize=fontsize)
+    axes[r, 0].set_ylim(bottom=0)  # all three metrics are non-negative (shared within the row)
+
+fig.align_ylabels(axes[:, 0])  # line up the row labels at the same x-position
+
+# single legend: one line per damping factor, distinguished by shade + style + marker
+handles = [Line2D([0], [0], color=shade, marker=marker, linestyle=linestyle, label=fr'$d_0={damping}$')
+           for damping, marker, linestyle, shade in zip(damping_factors, damping_markers,
+                                                         damping_linestyles, damping_shades)]
+fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, -0.08),
+           ncol=len(handles), fontsize=fontsize, frameon=False)
+
+fig.savefig(BASE / 'plots' / f'compositional_detailed_analysis.pdf', bbox_inches='tight')
+plt.show()
