@@ -9,11 +9,10 @@ dependencies = [
     "benchmark-models-petab",
     "colorcet>=3.1.0",
     "fides==0.8.0",
-    "fyeldgenerator==0.1.7",
-    "ipykernel>=7.3.0",
-    "jax>=0.7.1",
+    "fyeldgenerator>=0.1.7",
+    "jax[cuda13]>=0.7.1",
     "joblib==1.5.2",
-    "marimo>=0.23.9",
+    "marimo>=0.19.6",
     "matplotlib>=3.10.8",
     "numba>=0.63.1",
     "numpy>=2.3.5",
@@ -21,16 +20,15 @@ dependencies = [
     "playwright>=1.57.0",
     "plotly>=6.5.2",
     "pyabc>=0.12.16",
-    "pymc>=5.28.5",
     "pypesto==0.5.9",
     "sbibm",
     "tensorflow==2.20.0",
     "torch>=2.5.1",
-    "tqdm>=4.67.1",
+    "tqdm==4.67.1",
     "wandb>=0.27.0",
 ]
 
 [tool.uv.sources]
 benchmark-models-petab = { git = "https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git", subdirectory = "src/python", rev = "master" }
 sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
-bayesflow = { git = "https://github.com/bayesflow-org/bayesflow.git", rev = "dev" }
+bayesflow = { git = "https://github.com/bayesflow-org/bayesflow.git", rev = "tarp" }
