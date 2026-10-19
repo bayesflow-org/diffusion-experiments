@@ -1,9 +1,9 @@
 # Diffusion Models In Simulation-Based Inference: A Tutorial Review
 
-This repository hosts the experimental results for a [review](https://arxiv.org/abs/2512.20685) on diffusion models in Simulation-Based Inference (SBI).
+This repository hosts the experimental results for [Diffusion Models In Simulation-Based Inference: A Tutorial Review](https://openreview.net/forum?id=86Q261z005) by Arruda et al. (2026).
 
 ## Contents
-Several case studies illustrating the application of diffusion models in SBI:
+Several case studies illustrating the application of diffusion models in simulation-based inference (SBI):
 - intro_example: Inverse kinematics.
 - case_study1: Low-dimensional benchmarks in SBI.
 - case_study2: High-dimensional ODE task.
